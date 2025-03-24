@@ -2,15 +2,15 @@ let floatingButton = null;
 let promptMenu = null;
 let selectedTextContent = "";
 
-// 定义不同的prompt选项
+// Define different prompt options
 const promptOptions = [
   { 
     name: "解释内容", 
-    prompt: "请简短地解释以下内容：" 
+    prompt: "请解释以下内容：" 
   },
   { 
     name: "总结内容", 
-    prompt: "请简短地总结以下关键点：" 
+    prompt: "请总结以下关键点：" 
   },
   { 
     name: "简化表达", 
@@ -22,45 +22,51 @@ const promptOptions = [
   },
   { 
     name: "批判性分析", 
-    prompt: "请对以下内容进行简短的批判性分析：" 
+    prompt: "请对以下内容进行批判性分析：" 
+  },
+  {
+    name: "自定义提示...", 
+    isCustom: true
   }
 ];
 
-// 文本选择事件
+// Text selection event
 document.addEventListener('mouseup', (event) => {
-    // 延迟处理，等待选择完成
+    // Delay processing to wait for selection to complete
     setTimeout(() => {
         const selectedText = window.getSelection().toString().trim();
         
-        // 如果点击了浮动按钮或菜单，不执行任何操作
+        // Don't do anything if clicking on floating button or menu
         if (event.target.closest('.ai-buddy-floating-button') || 
-            event.target.closest('.ai-buddy-prompt-menu')) {
+            event.target.closest('.ai-buddy-prompt-menu') ||
+            event.target.closest('.ai-buddy-response-popup') ||
+            event.target.closest('.ai-buddy-custom-prompt')) {
             return;
         }
         
-        // 移除现有的浮动按钮
+        // Remove existing floating button
         if (floatingButton && floatingButton.parentNode) {
             document.body.removeChild(floatingButton);
             floatingButton = null;
         }
         
-        // 保存选中文本
+        // Save selected text
         selectedTextContent = selectedText;
         
         if (selectedText.length > 0) {
-            // 创建浮动按钮
+            // Create floating button
             floatingButton = document.createElement('div');
             floatingButton.className = 'ai-buddy-floating-button';
             floatingButton.innerHTML = '🤖';
             
-            // 定位按钮在鼠标附近
+            // Position button near mouse
             const x = event.pageX + 10;
             const y = event.pageY - 30;
             
             floatingButton.style.left = `${x}px`;
             floatingButton.style.top = `${y}px`;
             
-            // 标记按钮的位置，用于后续菜单定位
+            // Mark button position for menu positioning
             floatingButton.dataset.posX = x;
             floatingButton.dataset.posY = y;
             
@@ -69,9 +75,9 @@ document.addEventListener('mouseup', (event) => {
     }, 50);
 });
 
-// 监听整个文档的点击事件
+// Listen for clicks on the entire document
 document.addEventListener('click', (event) => {
-    // 处理点击浮动按钮的情况
+    // Handle clicking the floating button
     if (event.target.closest('.ai-buddy-floating-button')) {
         event.preventDefault();
         event.stopPropagation();
@@ -80,18 +86,18 @@ document.addEventListener('click', (event) => {
         const x = parseInt(button.dataset.posX);
         const y = parseInt(button.dataset.posY);
         
-        // 如果菜单已存在，移除它
+        // If menu exists, remove it
         if (promptMenu && promptMenu.parentNode) {
             document.body.removeChild(promptMenu);
             promptMenu = null;
         } else {
-            // 否则创建菜单
+            // Otherwise create menu
             createPromptMenu(selectedTextContent, x, y + 40);
         }
         return;
     }
     
-    // 处理点击菜单项的情况
+    // Handle clicking menu items
     if (event.target.closest('.ai-buddy-menu-item')) {
         event.preventDefault();
         event.stopPropagation();
@@ -100,71 +106,191 @@ document.addEventListener('click', (event) => {
         const optionIndex = parseInt(menuItem.dataset.index);
         const option = promptOptions[optionIndex];
         
-        // 显示加载指示器
+        if (option.isCustom) {
+            // Show custom prompt input
+            showCustomPromptInput(
+                parseInt(floatingButton.dataset.posX),
+                parseInt(floatingButton.dataset.posY)
+            );
+            return;
+        }
+        
+        // Show loading indicator
         menuItem.innerHTML = '⏳ ' + option.name;
         menuItem.style.pointerEvents = 'none';
         
-        // 获取按钮位置
+        // Get button position
         let x = 0, y = 0;
         if (floatingButton) {
             x = parseInt(floatingButton.dataset.posX);
             y = parseInt(floatingButton.dataset.posY);
         }
         
-        // 组合prompt和选中的文本
+        // Combine prompt and selected text
         const fullPrompt = option.prompt + " " + selectedTextContent;
         
-        // 通过background script发送请求
-        chrome.runtime.sendMessage(
-            {
-                type: 'getAIResponse',
-                text: fullPrompt
-            },
-            function(response) {
-                console.log("Response from background script:", response);
-                // 隐藏菜单
-                if (promptMenu && promptMenu.parentNode) {
-                    document.body.removeChild(promptMenu);
-                    promptMenu = null;
-                }
-                
-                if (chrome.runtime.lastError) {
-                    console.error("Chrome runtime error:", chrome.runtime.lastError);
-                    showResponsePopup("Error: " + chrome.runtime.lastError.message, x, y);
-                } else if (response && response.data) {
-                    showResponsePopup(response.data, x, y);
-                } else if (response && !response.success) {
-                    showResponsePopup("Error: " + (response.error || "Unknown error"), x, y);
-                } else {
-                    showResponsePopup("Unexpected response format", x, y);
-                }
-                
-                // 移除浮动元素
-                removeFloatingElements();
-            }
-        );
+        sendPromptToLLM(fullPrompt, x, y);
         return;
     }
     
-    // 点击其他区域时，清除浮动元素
-    if (!event.target.closest('.ai-buddy-response-popup')) {
+    // Handle custom prompt submission
+    if (event.target.closest('.ai-buddy-custom-submit')) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const customInput = document.querySelector('.ai-buddy-custom-input');
+        if (customInput && customInput.value.trim()) {
+            const customPrompt = customInput.value.trim() + " " + selectedTextContent;
+            
+            // Get button position
+            let x = 0, y = 0;
+            if (floatingButton) {
+                x = parseInt(floatingButton.dataset.posX);
+                y = parseInt(floatingButton.dataset.posY);
+            }
+            
+            // Remove custom prompt UI
+            const customPromptContainer = document.querySelector('.ai-buddy-custom-prompt');
+            if (customPromptContainer && customPromptContainer.parentNode) {
+                document.body.removeChild(customPromptContainer);
+            }
+            
+            sendPromptToLLM(customPrompt, x, y);
+        }
+        return;
+    }
+    
+    // Handle cancel custom prompt
+    if (event.target.closest('.ai-buddy-custom-cancel')) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const customPromptContainer = document.querySelector('.ai-buddy-custom-prompt');
+        if (customPromptContainer && customPromptContainer.parentNode) {
+            document.body.removeChild(customPromptContainer);
+        }
+        return;
+    }
+    
+    // Clear floating elements when clicking elsewhere
+    if (!event.target.closest('.ai-buddy-response-popup') && 
+        !event.target.closest('.ai-buddy-custom-prompt')) {
         removeFloatingElements();
+        
+        const customPromptContainer = document.querySelector('.ai-buddy-custom-prompt');
+        if (customPromptContainer && customPromptContainer.parentNode) {
+            document.body.removeChild(customPromptContainer);
+        }
     }
 });
 
-// 创建prompt选项菜单
+// Function to send prompt to LLM
+function sendPromptToLLM(prompt, x, y) {
+    console.log("Sending request to background script, prompt:", prompt);
+    
+    // Send request via background script
+    chrome.runtime.sendMessage(
+        {
+            type: 'getAIResponse',
+            text: prompt
+        },
+        function(response) {
+            console.log("Received response from background script:", response);
+            
+            if (chrome.runtime.lastError) {
+                console.error("Chrome runtime error:", chrome.runtime.lastError);
+                showResponsePopup("Error: " + chrome.runtime.lastError.message, x, y);
+            } else {
+                // More flexible response handling
+                let responseText = "";
+                
+                if (response && response.success && response.data) {
+                    responseText = response.data;
+                } else if (response && response.data) {
+                    responseText = response.data;
+                } else if (response && response.response) {
+                    responseText = response.response;
+                } else if (typeof response === 'string') {
+                    responseText = response;
+                } else if (response && response.error) {
+                    responseText = "Error: " + response.error;
+                } else if (response) {
+                    // Try to convert entire response object to string
+                    try {
+                        responseText = "Raw response: " + JSON.stringify(response);
+                    } catch (e) {
+                        responseText = "Received response in unknown format";
+                    }
+                } else {
+                    responseText = "No response received";
+                }
+                
+                showResponsePopup(responseText, x, y);
+            }
+            
+            // Remove floating elements
+            removeFloatingElements();
+        }
+    );
+}
+
+// Show custom prompt input
+function showCustomPromptInput(x, y) {
+    // Remove menu
+    if (promptMenu && promptMenu.parentNode) {
+        document.body.removeChild(promptMenu);
+        promptMenu = null;
+    }
+    
+    const customPromptContainer = document.createElement('div');
+    customPromptContainer.className = 'ai-buddy-custom-prompt';
+    customPromptContainer.style.left = `${x}px`;
+    customPromptContainer.style.top = `${y + 40}px`;
+    
+    const inputLabel = document.createElement('div');
+    inputLabel.className = 'ai-buddy-custom-label';
+    inputLabel.textContent = '输入自定义提示:';
+    customPromptContainer.appendChild(inputLabel);
+    
+    const inputField = document.createElement('textarea');
+    inputField.className = 'ai-buddy-custom-input';
+    inputField.placeholder = '例如: 请帮我分析这段文字...';
+    inputField.rows = 3;
+    customPromptContainer.appendChild(inputField);
+    
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'ai-buddy-custom-buttons';
+    
+    const submitButton = document.createElement('button');
+    submitButton.className = 'ai-buddy-custom-submit';
+    submitButton.textContent = '提交';
+    buttonContainer.appendChild(submitButton);
+    
+    const cancelButton = document.createElement('button');
+    cancelButton.className = 'ai-buddy-custom-cancel';
+    cancelButton.textContent = '取消';
+    buttonContainer.appendChild(cancelButton);
+    
+    customPromptContainer.appendChild(buttonContainer);
+    document.body.appendChild(customPromptContainer);
+    
+    // Focus the input field
+    inputField.focus();
+}
+
+// Create prompt options menu
 function createPromptMenu(selectedText, x, y) {
     promptMenu = document.createElement('div');
     promptMenu.className = 'ai-buddy-prompt-menu';
     promptMenu.style.left = `${x}px`;
     promptMenu.style.top = `${y}px`;
     
-    // 为每个prompt选项创建一个菜单项
+    // Create menu items for each prompt option
     promptOptions.forEach((option, index) => {
         const menuItem = document.createElement('div');
         menuItem.className = 'ai-buddy-menu-item';
         menuItem.textContent = option.name;
-        menuItem.dataset.index = index; // 存储选项索引
+        menuItem.dataset.index = index; // Store option index
         
         promptMenu.appendChild(menuItem);
     });
@@ -172,7 +298,7 @@ function createPromptMenu(selectedText, x, y) {
     document.body.appendChild(promptMenu);
 }
 
-// 移除所有浮动元素
+// Remove all floating elements
 function removeFloatingElements() {
     if (floatingButton && floatingButton.parentNode) {
         document.body.removeChild(floatingButton);
@@ -189,17 +315,17 @@ function showResponsePopup(response, x, y) {
     const popup = document.createElement('div');
     popup.className = 'ai-buddy-response-popup';
     
-    // 创建内容容器，使其支持滚动
+    // Create content container with scrolling
     const contentContainer = document.createElement('div');
     contentContainer.className = 'ai-buddy-response-content';
     contentContainer.textContent = response;
     popup.appendChild(contentContainer);
     
-    // 定位弹窗
+    // Position popup
     popup.style.left = `${x}px`;
     popup.style.top = `${y}px`;
     
-    // 添加关闭按钮
+    // Add close button
     const closeButton = document.createElement('button');
     closeButton.className = 'ai-buddy-close-button';
     closeButton.textContent = '×';

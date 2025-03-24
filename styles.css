@@ -20,16 +20,17 @@
 
 .ai-buddy-response-popup {
     position: absolute;
-    max-width: 300px;
-    min-width: 200px;
+    max-width: 350px;
+    min-width: 250px;
+    max-height: 350px;
     background-color: white;
     border-radius: 8px;
     padding: 15px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     z-index: 10001;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.6;
     color: #333;
 }
 
@@ -71,4 +72,91 @@
 
 .ai-buddy-menu-item:hover {
     background-color: #f0f0f0;
+}
+
+.ai-buddy-response-content {
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 5px;
+    margin-bottom: 10px;
+    white-space: pre-wrap;
+}
+
+.ai-buddy-response-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.ai-buddy-response-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.ai-buddy-response-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.ai-buddy-response-content::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+.ai-buddy-custom-prompt {
+    position: absolute;
+    width: 300px;
+    background-color: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    z-index: 10001;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-size: 14px;
+}
+
+.ai-buddy-custom-label {
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.ai-buddy-custom-input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+}
+
+.ai-buddy-custom-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.ai-buddy-custom-submit,
+.ai-buddy-custom-cancel {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.ai-buddy-custom-submit {
+    background-color: #4285f4;
+    color: white;
+}
+
+.ai-buddy-custom-submit:hover {
+    background-color: #3367d6;
+}
+
+.ai-buddy-custom-cancel {
+    background-color: #f1f1f1;
+    color: #333;
+}
+
+.ai-buddy-custom-cancel:hover {
+    background-color: #e4e4e4;
 } 
