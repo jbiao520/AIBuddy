@@ -17,7 +17,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             },
             body: JSON.stringify({
                 'model': 'gemma3:12b',
-                'prompt': '你是一个AI助手，用户选中了这一段话，你来给解释一下：'+request.text,
+                'prompt': request.text,
                 'stream': false
             })
         })
