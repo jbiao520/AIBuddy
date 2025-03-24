@@ -6,11 +6,11 @@ let selectedTextContent = "";
 const promptOptions = [
   { 
     name: "解释内容", 
-    prompt: "请解释以下内容：" 
+    prompt: "请简短地解释以下内容：" 
   },
   { 
     name: "总结内容", 
-    prompt: "请总结以下关键点：" 
+    prompt: "请简短地总结以下关键点：" 
   },
   { 
     name: "简化表达", 
@@ -22,7 +22,7 @@ const promptOptions = [
   },
   { 
     name: "批判性分析", 
-    prompt: "请对以下内容进行批判性分析：" 
+    prompt: "请对以下内容进行简短的批判性分析：" 
   }
 ];
 
@@ -122,11 +122,16 @@ document.addEventListener('click', (event) => {
             },
             function(response) {
                 console.log("Response from background script:", response);
+                // 隐藏菜单
+                if (promptMenu && promptMenu.parentNode) {
+                    document.body.removeChild(promptMenu);
+                    promptMenu = null;
+                }
                 
                 if (chrome.runtime.lastError) {
                     console.error("Chrome runtime error:", chrome.runtime.lastError);
                     showResponsePopup("Error: " + chrome.runtime.lastError.message, x, y);
-                } else if (response && response.success && response.data) {
+                } else if (response && response.data) {
                     showResponsePopup(response.data, x, y);
                 } else if (response && !response.success) {
                     showResponsePopup("Error: " + (response.error || "Unknown error"), x, y);
