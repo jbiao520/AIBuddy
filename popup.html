@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Reading Buddy</title>
+    <style>
+        body {
+            width: 300px;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .header {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            margin-bottom: 15px;
+        }
+        .settings {
+            margin-top: 15px;
+        }
+        .footer {
+            font-size: 12px;
+            color: #666;
+            margin-top: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>AI Reading Buddy</h2>
+    </div>
+    <div class="status">
+        Select text on any webpage and click the AI button to get instant insights!
+    </div>
+    <div class="settings">
+        <p>Local LLM Status: <span id="llm-status">Checking...</span></p>
+    </div>
+    <div class="footer">
+        Made with ❤️ for better reading
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html> 
