@@ -4,13 +4,22 @@ let selectedTextContent = "";
 
 // Define different prompt options
 const promptOptions = [
-  { 
-    name: "解释内容", 
-    prompt: "请解释以下内容："
-  },
-  { 
-    name: "总结内容", 
-    prompt: "请总结以下内容："
+  {
+    name: "LLM",
+    subMenu: [
+      { 
+        name: "解释内容", 
+        prompt: "请解释以下内容："
+      },
+      { 
+        name: "翻译内容", 
+        prompt: "请翻译以下内容："
+      },
+      {
+        name: "自定义提示...",
+        isCustom: true
+      }
+    ]
   },
   {
     name: "API 调用",
@@ -46,10 +55,6 @@ const promptOptions = [
         paramName: "id"  // 选中的文字将作为id参数
       }
     ]
-  },
-  {
-    name: "自定义提示...",
-    isCustom: true
   }
 ];
 
@@ -73,6 +78,7 @@ document.addEventListener('mouseup', (event) => {
         
         // Save selected text
         selectedTextContent = selectedText;
+        console.log("保存的选中文本:", selectedTextContent);
         
         if (selectedText.length > 0) {
             // Create floating button
@@ -168,45 +174,117 @@ function sendPromptToLLM(prompt, x, y) {
 
 // Show custom prompt input
 function showCustomPromptInput(x, y) {
-    // Remove menu
+    // 移除现有的自定义提示框（如果存在）
+    const existingPrompt = document.querySelector('.ai-buddy-custom-prompt');
+    if (existingPrompt && existingPrompt.parentNode) {
+        document.body.removeChild(existingPrompt);
+    }
+
+    // 移除菜单
     if (promptMenu && promptMenu.parentNode) {
         document.body.removeChild(promptMenu);
         promptMenu = null;
     }
-    
+
     const customPromptContainer = document.createElement('div');
     customPromptContainer.className = 'ai-buddy-custom-prompt';
     customPromptContainer.style.left = `${x}px`;
     customPromptContainer.style.top = `${y + 40}px`;
-    
+
     const inputLabel = document.createElement('div');
     inputLabel.className = 'ai-buddy-custom-label';
     inputLabel.textContent = '输入自定义提示:';
     customPromptContainer.appendChild(inputLabel);
-    
+
     const inputField = document.createElement('textarea');
     inputField.className = 'ai-buddy-custom-input';
     inputField.placeholder = '例如: 请帮我分析这段文字...';
     inputField.rows = 3;
     customPromptContainer.appendChild(inputField);
-    
+
     const buttonContainer = document.createElement('div');
     buttonContainer.className = 'ai-buddy-custom-buttons';
-    
+
+    // 创建提交按钮
     const submitButton = document.createElement('button');
     submitButton.className = 'ai-buddy-custom-submit';
     submitButton.textContent = '提交';
+    submitButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const customPromptText = inputField.value.trim();
+        if (customPromptText) {
+            // 先显示加载状态
+            const loadingMessage = "正在处理您的请求...";
+            showResponse(loadingMessage, x, y);
+            
+            // 移除自定义提示框
+            if (customPromptContainer.parentNode) {
+                document.body.removeChild(customPromptContainer);
+            }
+            
+            // 确保我们仍然有选中的文本
+            if (!selectedTextContent) {
+                showResponse("错误: 找不到选中的文本", x, y);
+                return;
+            }
+            
+            console.log("发送到LLM的文本:", selectedTextContent);
+            console.log("发送到LLM的提示:", customPromptText);
+            
+            // 组合提示文本和选中的内容
+            const fullPrompt = customPromptText + " " + selectedTextContent;
+            
+            // 调用LLM
+            fetch('http://localhost:11434/api/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: "gemma3:12b",
+                    prompt: fullPrompt,
+                    stream: false
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // 显示LLM响应
+                showResponse(data.response || "无响应", x, y);
+            })
+            .catch(error => {
+                console.error("LLM调用错误:", error);
+                showResponse("调用LLM时出错: " + error.message, x, y);
+            });
+        }
+    });
     buttonContainer.appendChild(submitButton);
-    
+
+    // 创建取消按钮
     const cancelButton = document.createElement('button');
     cancelButton.className = 'ai-buddy-custom-cancel';
     cancelButton.textContent = '取消';
+    cancelButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // 移除自定义提示框
+        if (customPromptContainer.parentNode) {
+            document.body.removeChild(customPromptContainer);
+        }
+    });
     buttonContainer.appendChild(cancelButton);
-    
+
     customPromptContainer.appendChild(buttonContainer);
     document.body.appendChild(customPromptContainer);
-    
-    // Focus the input field
+
+    // 聚焦输入框
     inputField.focus();
 }
 
