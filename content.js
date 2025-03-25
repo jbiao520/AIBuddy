@@ -393,6 +393,9 @@ document.head.appendChild(styleElement);
 
 // Show custom prompt input
 function showCustomPromptInput(x, y) {
+    // 保存当前的选中文本，防止后续操作清空它
+    const savedSelectedText = selectedTextContent;
+    
     // 移除现有的自定义提示框（如果存在）
     const existingPrompt = document.querySelector('.ai-buddy-custom-prompt');
     if (existingPrompt && existingPrompt.parentNode) {
@@ -443,17 +446,17 @@ function showCustomPromptInput(x, y) {
                 document.body.removeChild(customPromptContainer);
             }
             
-            // 确保我们仍然有选中的文本
-            if (!selectedTextContent) {
+            // 使用之前保存的文本，而不是当前的全局变量
+            if (!savedSelectedText) {
                 showResponse("错误: 找不到选中的文本", x, y);
                 return;
             }
             
-            console.log("发送到LLM的文本:", selectedTextContent);
+            console.log("发送到LLM的文本:", savedSelectedText);
             console.log("发送到LLM的提示:", customPromptText);
             
             // 组合提示文本和选中的内容
-            const fullPrompt = customPromptText + " " + selectedTextContent;
+            const fullPrompt = customPromptText + " " + savedSelectedText;
             
             // 调用LLM
             fetch('http://localhost:11434/api/generate', {
@@ -500,7 +503,21 @@ function showCustomPromptInput(x, y) {
     });
     buttonContainer.appendChild(cancelButton);
 
+    // 可选: 添加一个显示选中文本的区域
+    const selectedTextDisplay = document.createElement('div');
+    selectedTextDisplay.className = 'ai-buddy-selected-text-display';
+    selectedTextDisplay.innerHTML = `<strong>选中文本:</strong> <span class="text-preview">${savedSelectedText.length > 50 ? savedSelectedText.substring(0, 50) + '...' : savedSelectedText}</span>`;
+    selectedTextDisplay.style.marginTop = '8px';
+    selectedTextDisplay.style.fontSize = '12px';
+    selectedTextDisplay.style.color = '#666';
+    selectedTextDisplay.style.padding = '4px 8px';
+    selectedTextDisplay.style.backgroundColor = '#f9f9f9';
+    selectedTextDisplay.style.borderRadius = '4px';
+    selectedTextDisplay.style.maxHeight = '60px';
+    selectedTextDisplay.style.overflow = 'auto';
+    
     customPromptContainer.appendChild(buttonContainer);
+    customPromptContainer.appendChild(selectedTextDisplay);  // 添加选中文本显示
     document.body.appendChild(customPromptContainer);
 
     // 聚焦输入框
