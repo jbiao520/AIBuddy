@@ -139,11 +139,41 @@ function sendToLLM(prompt, x, y) {
         return;
     }
     
-    // 添加光标效果
+    // 创建光标容器和输出文本容器
+    const outputContainer = document.createElement('div');
+    outputContainer.className = 'ai-buddy-output-text';
+    contentContainer.appendChild(outputContainer);
+    
+    // 创建一个固定在底部的光标容器
+    const cursorContainer = document.createElement('div');
+    cursorContainer.className = 'ai-buddy-cursor-container';
+    contentContainer.appendChild(cursorContainer);
+    
+    // 添加光标
     const cursor = document.createElement('span');
     cursor.className = 'ai-buddy-cursor';
     cursor.textContent = '▋';
-    contentContainer.appendChild(cursor);
+    cursorContainer.appendChild(cursor);
+    
+    // 变量跟踪是否用户手动滚动了
+    let userHasScrolled = false;
+    let lastScrollTop = 0;
+    
+    // 监听滚动事件
+    contentContainer.addEventListener('scroll', () => {
+        // 检测是否用户向上滚动
+        if (contentContainer.scrollTop < lastScrollTop) {
+            userHasScrolled = true;
+        }
+        
+        // 检测是否滚动到底部
+        const isAtBottom = contentContainer.scrollHeight - contentContainer.scrollTop <= contentContainer.clientHeight + 10;
+        if (isAtBottom) {
+            userHasScrolled = false;
+        }
+        
+        lastScrollTop = contentContainer.scrollTop;
+    });
     
     console.log("发送到LLM的提示:", prompt);
     
@@ -156,7 +186,7 @@ function sendToLLM(prompt, x, y) {
         body: JSON.stringify({
             model: "gemma3:12b",
             prompt: prompt,
-            stream: true  // 启用流式输出
+            stream: true
         })
     })
     .then(response => {
@@ -173,8 +203,8 @@ function sendToLLM(prompt, x, y) {
             return reader.read().then(({ done, value }) => {
                 if (done) {
                     // 流结束，移除光标
-                    if (cursor.parentNode) {
-                        cursor.parentNode.removeChild(cursor);
+                    if (cursorContainer.parentNode) {
+                        cursorContainer.parentNode.removeChild(cursorContainer);
                     }
                     return;
                 }
@@ -193,13 +223,12 @@ function sendToLLM(prompt, x, y) {
                             fullResponse += data.response;
                             
                             // 渲染Markdown并更新显示
-                            contentContainer.innerHTML = renderMarkdown(fullResponse);
+                            outputContainer.innerHTML = renderMarkdown(fullResponse);
                             
-                            // 重新添加光标
-                            contentContainer.appendChild(cursor);
-                            
-                            // 自动滚动到底部
-                            contentContainer.scrollTop = contentContainer.scrollHeight;
+                            // 如果用户没有手动滚动，则自动滚动到底部
+                            if (!userHasScrolled) {
+                                contentContainer.scrollTop = contentContainer.scrollHeight;
+                            }
                         }
                     }
                 } catch (e) {
@@ -216,11 +245,11 @@ function sendToLLM(prompt, x, y) {
     })
     .catch(error => {
         console.error("LLM调用错误:", error);
-        contentContainer.innerHTML = renderMarkdown("调用LLM时出错: " + error.message);
+        outputContainer.innerHTML = renderMarkdown("调用LLM时出错: " + error.message);
         
         // 移除光标
-        if (cursor.parentNode) {
-            cursor.parentNode.removeChild(cursor);
+        if (cursorContainer.parentNode) {
+            cursorContainer.parentNode.removeChild(cursorContainer);
         }
     });
 }
@@ -1100,160 +1129,34 @@ const improvedStyles = `
     }
 
     .ai-buddy-response-content {
-        max-height: calc(70vh - 50px);
+        position: relative;
+        max-height: calc(70vh - 80px);
         overflow-y: auto;
         padding-right: 12px;
     }
     
-    /* 标题样式 */
-    .ai-buddy-response-content h1 {
-        font-size: 1.4em;
-        margin-top: 16px;
-        margin-bottom: 12px;
-        color: #111;
-        border-bottom: 1px solid #eee;
-        padding-bottom: 6px;
+    .ai-buddy-output-text {
+        padding-bottom: 24px; /* 为光标留出空间 */
     }
     
-    .ai-buddy-response-content h2 {
-        font-size: 1.3em;
-        margin-top: 14px;
-        margin-bottom: 10px;
-        color: #222;
+    .ai-buddy-cursor-container {
+        margin-top: 3px;
     }
     
-    .ai-buddy-response-content h3 {
-        font-size: 1.2em;
-        margin-top: 12px;
-        margin-bottom: 8px;
-        color: #333;
+    .ai-buddy-cursor {
+        display: inline-block;
+        width: 0.6em;
+        height: 1.2em;
+        background-color: #333;
+        animation: blink 1s step-end infinite;
+        vertical-align: text-bottom;
     }
     
-    /* 段落样式 */
-    .ai-buddy-response-content p {
-        margin-bottom: 12px;
-        line-height: 1.6;
-    }
-    
-    /* 加粗与斜体 */
-    .ai-buddy-response-content strong {
-        font-weight: 600;
-        color: #000;
-    }
-    
-    .ai-buddy-response-content em {
-        font-style: italic;
-    }
-    
-    /* 列表样式 */
-    .ai-buddy-response-content ul, 
-    .ai-buddy-response-content ol {
-        padding-left: 24px;
-        margin-bottom: 14px;
-        margin-top: 8px;
-    }
-    
-    .ai-buddy-response-content li {
-        margin-bottom: 6px;
-    }
-    
-    /* 代码样式 */
-    .ai-buddy-response-content code {
-        font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-        background-color: #f6f8fa;
-        padding: 2px 4px;
-        border-radius: 3px;
-        font-size: 85%;
-    }
-    
-    .ai-buddy-response-content pre {
-        background-color: #f6f8fa;
-        padding: 12px;
-        border-radius: 6px;
-        overflow-x: auto;
-        margin: 12px 0;
-    }
-    
-    .ai-buddy-response-content pre code {
-        background-color: transparent;
-        padding: 0;
-    }
-    
-    /* 引用块 */
-    .ai-buddy-response-content blockquote {
-        border-left: 4px solid #dfe2e5;
-        padding-left: 16px;
-        margin-left: 0;
-        margin-right: 0;
-        margin-top: 12px;
-        margin-bottom: 12px;
-        color: #6a737d;
-    }
-    
-    /* 链接样式 */
-    .ai-buddy-response-content a {
-        color: #0366d6;
-        text-decoration: none;
-    }
-    
-    .ai-buddy-response-content a:hover {
-        text-decoration: underline;
-    }
-    
-    /* 水平线 */
-    .ai-buddy-response-content hr {
-        height: 1px;
-        background-color: #e1e4e8;
-        border: none;
-        margin: 16px 0;
-    }
-    
-    /* 自定义滚动条 */
-    .ai-buddy-response-content::-webkit-scrollbar {
-        width: 8px;
-    }
-    
-    .ai-buddy-response-content::-webkit-scrollbar-thumb {
-        background-color: #d1d5db;
-        border-radius: 4px;
-    }
-    
-    .ai-buddy-response-content::-webkit-scrollbar-thumb:hover {
-        background-color: #a8adb3;
-    }
-    
-    .ai-buddy-response-content::-webkit-scrollbar-track {
-        background-color: #f1f1f1;
-        border-radius: 4px;
-    }
-    
-    /* 关闭按钮样式 */
-    .ai-buddy-close-button {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        background: none;
-        border: none;
-        font-size: 20px;
-        cursor: pointer;
-        color: #666;
-        padding: 6px;
-        border-radius: 50%;
-        line-height: 1;
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background-color 0.2s;
-    }
-    
-    .ai-buddy-close-button:hover {
-        background-color: #f0f0f0;
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
     }
 `;
-
-
 
 // 还可以添加额外的CSS来优化段落间距
 const additionalCSS = `
