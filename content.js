@@ -124,53 +124,237 @@ document.addEventListener('click', (event) => {
     }
 });
 
-// Function to send prompt to LLM
-function sendPromptToLLM(prompt, x, y) {
-    console.log("Sending request to background script, prompt:", prompt);
+// 修改发送到LLM的函数，确保关闭所有菜单
+function sendToLLM(prompt, x, y) {
+    // 关闭所有菜单
+    removeAllMenus();
     
-    // Send request via background script
-    chrome.runtime.sendMessage(
-        {
-            type: 'getAIResponse',
-            text: prompt
+    // 立即显示一个空的响应弹窗
+    showResponse("", x, y, true);
+    
+    // 获取刚创建的响应弹窗内容容器
+    const contentContainer = document.querySelector('.ai-buddy-response-content');
+    if (!contentContainer) {
+        console.error("找不到响应内容容器");
+        return;
+    }
+    
+    // 添加光标效果
+    const cursor = document.createElement('span');
+    cursor.className = 'ai-buddy-cursor';
+    cursor.textContent = '▋';
+    contentContainer.appendChild(cursor);
+    
+    console.log("发送到LLM的提示:", prompt);
+    
+    // 发送请求到LLM，使用stream模式
+    fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
         },
-        function(response) {
-            console.log("Received response from background script:", response);
-            
-            if (chrome.runtime.lastError) {
-                console.error("Chrome runtime error:", chrome.runtime.lastError);
-                showResponse(response, x, y);
-            } else {
-                // More flexible response handling
-                let responseText = "";
-                
-                if (response && response.success && response.data) {
-                    responseText = response.data;
-                } else if (response && response.data) {
-                    responseText = response.data;
-                } else if (response && response.response) {
-                    responseText = response.response;
-                } else if (typeof response === 'string') {
-                    responseText = response;
-                } else if (response && response.error) {
-                    responseText = "Error: " + response.error;
-                } else {
-                    // Try to convert entire response object to string
-                    try {
-                        responseText = "Raw response: " + JSON.stringify(response);
-                    } catch (e) {
-                        responseText = "Received response in unknown format";
+        body: JSON.stringify({
+            model: "gemma3:12b",
+            prompt: prompt,
+            stream: true  // 启用流式输出
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = "";
+        
+        // 函数：处理流数据
+        function processStream() {
+            return reader.read().then(({ done, value }) => {
+                if (done) {
+                    // 流结束，移除光标
+                    if (cursor.parentNode) {
+                        cursor.parentNode.removeChild(cursor);
                     }
+                    return;
                 }
                 
-                showResponse(responseText, x, y);
-            }
-            
-            // Remove floating elements
-            removeFloatingElements();
+                // 解码接收到的数据
+                const chunk = decoder.decode(value, { stream: true });
+                
+                try {
+                    // 尝试解析JSON响应
+                    const lines = chunk.split('\n').filter(line => line.trim());
+                    
+                    for (const line of lines) {
+                        const data = JSON.parse(line);
+                        if (data.response) {
+                            // 添加新文本到响应
+                            fullResponse += data.response;
+                            
+                            // 渲染Markdown并更新显示
+                            contentContainer.innerHTML = renderMarkdown(fullResponse);
+                            
+                            // 重新添加光标
+                            contentContainer.appendChild(cursor);
+                            
+                            // 自动滚动到底部
+                            contentContainer.scrollTop = contentContainer.scrollHeight;
+                        }
+                    }
+                } catch (e) {
+                    console.error("解析流数据错误:", e, "原始数据:", chunk);
+                }
+                
+                // 继续处理流
+                return processStream();
+            });
         }
-    );
+        
+        // 开始处理流
+        return processStream();
+    })
+    .catch(error => {
+        console.error("LLM调用错误:", error);
+        contentContainer.innerHTML = renderMarkdown("调用LLM时出错: " + error.message);
+        
+        // 移除光标
+        if (cursor.parentNode) {
+            cursor.parentNode.removeChild(cursor);
+        }
+    });
 }
+
+// 确保弹窗宽度修改生效的方法
+function updatePopupStyles() {
+  // 1. 创建或获取样式元素
+  let styleElement = document.getElementById('ai-buddy-custom-styles');
+  if (!styleElement) {
+    styleElement = document.createElement('style');
+    styleElement.id = 'ai-buddy-custom-styles';
+    document.head.appendChild(styleElement);
+  }
+
+  // 2. 定义更新的样式
+  const updatedStyles = `
+    .ai-buddy-response-popup {
+      position: absolute !important;
+      width: 600px !important;  /* 增加宽度 */
+      max-width: 90vw !important; 
+      max-height: 70vh !important;
+      background-color: white !important;
+      border-radius: 12px !important;
+      padding: 24px !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15) !important;
+      z-index: 10001 !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+      font-size: 15px !important;
+      line-height: 1.6 !important;
+      color: #333 !important;
+    }
+  `;
+
+  // 3. 应用样式
+  styleElement.textContent = updatedStyles;
+  
+  // 4. 更新任何现有弹窗的样式
+  const existingPopups = document.querySelectorAll('.ai-buddy-response-popup');
+  existingPopups.forEach(popup => {
+    popup.style.width = '600px';
+  });
+  
+  console.log("弹窗样式已更新");
+}
+
+// 在创建弹窗前调用此函数
+updatePopupStyles();
+
+// 修改showResponse函数，确保新样式应用
+function showResponse(response, x, y, isStreaming = false) {
+  // 确保样式更新
+  updatePopupStyles();
+  
+  // 移除现有的响应弹窗
+  const existingPopups = document.querySelectorAll('.ai-buddy-response-popup');
+  existingPopups.forEach(popup => {
+    if (popup.parentNode) {
+      popup.parentNode.removeChild(popup);
+    }
+  });
+  
+  const popup = document.createElement('div');
+  popup.className = 'ai-buddy-response-popup';
+  
+  // 直接设置内联样式，确保宽度生效
+  popup.style.width = '600px';
+  popup.style.maxWidth = '90vw';
+  
+  // 创建顶部操作栏
+  const actionBar = document.createElement('div');
+  actionBar.className = 'ai-buddy-action-bar';
+  
+  // 添加操作按钮
+  // ... 您现有的操作按钮代码 ...
+  
+  popup.appendChild(actionBar);
+  
+  // 创建内容容器
+  const contentContainer = document.createElement('div');
+  contentContainer.className = 'ai-buddy-response-content';
+  
+  // 如果不是流式输出，直接渲染全部内容
+  if (!isStreaming) {
+      contentContainer.innerHTML = renderMarkdown(response);
+  }
+  // 如果是流式输出，内容会在流处理过程中逐步添加
+  
+  popup.appendChild(contentContainer);
+  
+  // 定位弹窗
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  
+  popup.style.left = `${Math.min(x, viewportWidth - 500)}px`;
+  popup.style.top = `${Math.min(y, viewportHeight - 400)}px`;
+  
+  // 添加关闭按钮
+  const closeButton = document.createElement('button');
+  closeButton.className = 'ai-buddy-close-button';
+  closeButton.textContent = '×';
+  closeButton.onclick = () => {
+      if (popup.parentNode) {
+          popup.parentNode.removeChild(popup);
+      }
+  };
+  popup.appendChild(closeButton);
+  
+  document.body.appendChild(popup);
+  
+  return contentContainer; // 返回内容容器，方便流式更新
+}
+
+// 添加光标动画的CSS
+const cursorStyle = `
+    .ai-buddy-cursor {
+        display: inline-block;
+        width: 0.6em;
+        height: 1.2em;
+        background-color: #333;
+        margin-left: 2px;
+        animation: blink 1s step-end infinite;
+        vertical-align: text-bottom;
+    }
+    
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+    }
+`;
+
+// 将光标样式添加到您现有的样式中
+const styleElement = document.createElement('style');
+styleElement.textContent = cursorStyle;
+document.head.appendChild(styleElement);
 
 // Show custom prompt input
 function showCustomPromptInput(x, y) {
@@ -388,7 +572,7 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
             
             // 发送请求
             const fullPrompt = option.prompt + " " + selectedTextContent;
-            sendPromptToLLM(fullPrompt, x, y);
+            sendToLLM(fullPrompt, x, y);
         });
         
         menu.appendChild(menuItem);
@@ -639,52 +823,6 @@ function removeAllPopups() {
     promptMenu = null;
 }
 
-// 修改showResponse函数，确保清理其他元素
-function showResponse(response, x, y) {
-    // 首先移除所有其他弹窗和加载指示器
-    const existingPopups = document.querySelectorAll('.ai-buddy-response-popup, .ai-buddy-loader, .ai-buddy-temp-message');
-    existingPopups.forEach(popup => {
-        if (popup.parentNode) {
-            popup.parentNode.removeChild(popup);
-        }
-    });
-    
-    const popup = document.createElement('div');
-    popup.className = 'ai-buddy-response-popup';
-    
-    // 创建内容容器
-    const contentContainer = document.createElement('div');
-    contentContainer.className = 'ai-buddy-response-content';
-    
-    // 渲染Markdown内容
-    contentContainer.innerHTML = renderMarkdown(response);
-    
-    popup.appendChild(contentContainer);
-    
-    // 定位弹窗，考虑屏幕边缘
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    popup.style.left = `${Math.min(x, viewportWidth - 500)}px`;
-    popup.style.top = `${Math.min(y, viewportHeight - 400)}px`;
-    
-    // 添加关闭按钮
-    const closeButton = document.createElement('button');
-    closeButton.className = 'ai-buddy-close-button';
-    closeButton.textContent = '×';
-    closeButton.onclick = () => {
-        // 移除弹窗
-        if (popup.parentNode) {
-            popup.parentNode.removeChild(popup);
-        }
-        // 同时清理所有其他UI元素
-        removeAllPopups();
-    };
-    popup.appendChild(closeButton);
-    
-    document.body.appendChild(popup);
-}
-
 // 辅助函数：根据菜单项元素查找对应的选项
 function findOptionByElement(element) {
     const index = parseInt(element.dataset.index);
@@ -757,7 +895,7 @@ function showMenu(x, y, parentOption = null) {
                     showCustomPromptInput(x, y);
                 } else {
                     // 普通 prompt 处理
-                    sendPromptToLLM(option.prompt + " " + selectedTextContent, x, y);
+                    sendToLLM(option.prompt + " " + selectedTextContent, x, y);
                 }
             });
         }
@@ -947,8 +1085,8 @@ function formatArxivResponse(xmlString) {
 const improvedStyles = `
     .ai-buddy-response-popup {
         position: absolute;
-        width: 480px;  /* 更宽的弹窗 */
-        max-width: 90vw; /* 响应式设计 */
+        width: 600px;  /* 增加宽度，原来是480px */
+        max-width: 90vw; /* 保持响应式设计 */
         max-height: 70vh;
         background-color: white;
         border-radius: 12px;
@@ -1115,10 +1253,7 @@ const improvedStyles = `
     }
 `;
 
-// 应用样式
-const styleElement = document.createElement('style');
-styleElement.textContent = improvedStyles;
-document.head.appendChild(styleElement);
+
 
 // 还可以添加额外的CSS来优化段落间距
 const additionalCSS = `
@@ -1186,3 +1321,33 @@ const loaderStyles = `
 `;
 
 // 将加载指示器样式添加到您现有的样式中 
+
+// 添加一个专门的函数来移除所有菜单
+function removeAllMenus() {
+    // 移除主菜单
+    const mainMenus = document.querySelectorAll('.ai-buddy-prompt-menu, .ai-buddy-main-menu');
+    mainMenus.forEach(menu => {
+        if (menu.parentNode) {
+            menu.parentNode.removeChild(menu);
+        }
+    });
+    
+    // 移除子菜单
+    const subMenus = document.querySelectorAll('.ai-buddy-submenu');
+    subMenus.forEach(menu => {
+        if (menu.parentNode) {
+            menu.parentNode.removeChild(menu);
+        }
+    });
+    
+    // 移除自定义提示框
+    const customPrompts = document.querySelectorAll('.ai-buddy-custom-prompt');
+    customPrompts.forEach(prompt => {
+        if (prompt.parentNode) {
+            prompt.parentNode.removeChild(prompt);
+        }
+    });
+    
+    // 重置菜单全局变量
+    promptMenu = null;
+} 
