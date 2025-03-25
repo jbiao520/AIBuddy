@@ -371,8 +371,11 @@ function removeFloatingElements() {
     removeAllSubmenus();
 }
 
-// 增强的Markdown渲染函数
+// 修改Markdown渲染函数，减少不必要的空行
 function renderMarkdown(text) {
+    // 首先移除多余的空行，将连续的空行替换为单个空行
+    text = text.replace(/\n{3,}/g, '\n\n');
+    
     // 处理代码块 (```code```)
     text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
     
@@ -393,26 +396,42 @@ function renderMarkdown(text) {
     // 处理链接 [text](url)
     text = text.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
     
-    // 处理无序列表
-    let inList = false;
-    let listType = '';
-    
-    // 先分割成行处理列表
+    // 将文本分割成行，处理列表和段落
     let lines = text.split('\n');
     let result = [];
+    let inList = false;
+    let listType = '';
+    let inParagraph = false;
     
     for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
+        let line = lines[i].trim();
         
-        // 处理无序列表项
+        // 跳过纯空行
+        if (line === '') {
+            if (inList) {
+                result.push(`</${listType}>`);
+                inList = false;
+            }
+            if (inParagraph) {
+                result.push('</p>');
+                inParagraph = false;
+            }
+            continue;
+        }
+        
+        // 处理无序列表
         const ulMatch = line.match(/^[\*\-] (.*)$/);
-        // 处理有序列表项
+        // 处理有序列表
         const olMatch = line.match(/^(\d+)\. (.*)$/);
         
         if (ulMatch) {
             if (!inList || listType !== 'ul') {
                 if (inList) {
                     result.push(`</${listType}>`);
+                }
+                if (inParagraph) {
+                    result.push('</p>');
+                    inParagraph = false;
                 }
                 result.push('<ul>');
                 inList = true;
@@ -424,6 +443,10 @@ function renderMarkdown(text) {
             if (!inList || listType !== 'ol') {
                 if (inList) {
                     result.push(`</${listType}>`);
+                }
+                if (inParagraph) {
+                    result.push('</p>');
+                    inParagraph = false;
                 }
                 result.push('<ol>');
                 inList = true;
@@ -437,34 +460,117 @@ function renderMarkdown(text) {
                 inList = false;
             }
             
+            // 处理标题 (已在前面处理，这里只需要直接添加)
+            if (line.startsWith('<h1>') || line.startsWith('<h2>') || line.startsWith('<h3>')) {
+                if (inParagraph) {
+                    result.push('</p>');
+                    inParagraph = false;
+                }
+                result.push(line);
+            }
             // 处理引用块
-            if (line.startsWith('> ')) {
+            else if (line.startsWith('> ')) {
+                if (inParagraph) {
+                    result.push('</p>');
+                    inParagraph = false;
+                }
                 result.push(`<blockquote>${line.substring(2)}</blockquote>`);
             }
             // 处理水平线
             else if (line.match(/^-{3,}$/) || line.match(/^\*{3,}$/)) {
+                if (inParagraph) {
+                    result.push('</p>');
+                    inParagraph = false;
+                }
                 result.push('<hr>');
             }
-            // 普通段落
-            else if (line.trim() !== '') {
-                result.push(`<p>${line}</p>`);
+            // 处理代码块 (已在前面处理，这里只需要直接添加)
+            else if (line.startsWith('<pre>')) {
+                if (inParagraph) {
+                    result.push('</p>');
+                    inParagraph = false;
+                }
+                result.push(line);
             }
+            // 普通段落
             else {
-                result.push('');  // 保留空行
+                if (!inParagraph) {
+                    result.push('<p>');
+                    inParagraph = true;
+                } else {
+                    // 如果已经在段落中，添加换行符
+                    result.push('<br>');
+                }
+                result.push(line);
             }
         }
     }
     
-    // 结束列表（如果在列表中）
+    // 关闭最后一个打开的标签
     if (inList) {
         result.push(`</${listType}>`);
     }
+    if (inParagraph) {
+        result.push('</p>');
+    }
     
-    return result.join('\n');
+    // 移除空标签和重复的标签
+    let html = result.join('');
+    html = html.replace(/<p><\/p>/g, '');
+    html = html.replace(/<p><br><\/p>/g, '');
+    
+    return html;
 }
 
-// 修改响应显示函数
+// 添加一个函数来清理所有弹出元素
+function removeAllPopups() {
+    // 移除所有浮动按钮
+    const floatingButtons = document.querySelectorAll('.ai-buddy-floating-button');
+    floatingButtons.forEach(button => {
+        if (button.parentNode) {
+            button.parentNode.removeChild(button);
+        }
+    });
+    
+    // 移除所有菜单
+    const menus = document.querySelectorAll('.ai-buddy-prompt-menu');
+    menus.forEach(menu => {
+        if (menu.parentNode) {
+            menu.parentNode.removeChild(menu);
+        }
+    });
+    
+    // 移除所有响应弹窗
+    const popups = document.querySelectorAll('.ai-buddy-response-popup');
+    popups.forEach(popup => {
+        if (popup.parentNode) {
+            popup.parentNode.removeChild(popup);
+        }
+    });
+    
+    // 移除任何加载指示器或临时消息
+    const loaders = document.querySelectorAll('.ai-buddy-loader, .ai-buddy-temp-message');
+    loaders.forEach(loader => {
+        if (loader.parentNode) {
+            loader.parentNode.removeChild(loader);
+        }
+    });
+    
+    // 重置全局变量
+    floatingButton = null;
+    promptMenu = null;
+}
+
+// 修改showResponse函数，确保清理其他元素
 function showResponse(response, x, y) {
+    // 首先移除所有其他弹窗和加载指示器
+    const existingPopups = document.querySelectorAll('.ai-buddy-response-popup, .ai-buddy-loader, .ai-buddy-temp-message');
+    existingPopups.forEach(popup => {
+        if (popup.parentNode) {
+            popup.parentNode.removeChild(popup);
+        }
+    });
+    
     const popup = document.createElement('div');
     popup.className = 'ai-buddy-response-popup';
     
@@ -472,7 +578,7 @@ function showResponse(response, x, y) {
     const contentContainer = document.createElement('div');
     contentContainer.className = 'ai-buddy-response-content';
     
-    // 使用增强的Markdown渲染函数
+    // 渲染Markdown内容
     contentContainer.innerHTML = renderMarkdown(response);
     
     popup.appendChild(contentContainer);
@@ -488,7 +594,14 @@ function showResponse(response, x, y) {
     const closeButton = document.createElement('button');
     closeButton.className = 'ai-buddy-close-button';
     closeButton.textContent = '×';
-    closeButton.onclick = () => document.body.removeChild(popup);
+    closeButton.onclick = () => {
+        // 移除弹窗
+        if (popup.parentNode) {
+            popup.parentNode.removeChild(popup);
+        }
+        // 同时清理所有其他UI元素
+        removeAllPopups();
+    };
     popup.appendChild(closeButton);
     
     document.body.appendChild(popup);
@@ -579,10 +692,19 @@ function showMenu(x, y, parentOption = null) {
 
 // API 调用函数
 function callExternalApi(apiOption, text, x, y) {
-    console.log("Making API call with text:", text);
-    
     // 显示加载提示
-    showResponse("正在处理...", x, y);
+    const loader = document.createElement('div');
+    loader.className = 'ai-buddy-loader';
+    loader.textContent = "正在处理...";
+    loader.style.left = `${x}px`;
+    loader.style.top = `${y}px`;
+    document.body.appendChild(loader);
+    
+    // 移除菜单
+    if (promptMenu && promptMenu.parentNode) {
+        document.body.removeChild(promptMenu);
+        promptMenu = null;
+    }
     
     let url = apiOption.apiUrl;
     
@@ -631,7 +753,13 @@ function callExternalApi(apiOption, text, x, y) {
             console.error("API error:", error);
             showResponse("API调用失败: " + error.message, x, y);
         })
-        .finally(() => removeFloatingElements());
+        .finally(() => {
+            // 移除加载提示
+            if (loader.parentNode) {
+                document.body.removeChild(loader);
+            }
+            removeFloatingElements();
+        });
     } else {
         // POST请求
         fetch(url, {
@@ -659,7 +787,13 @@ function callExternalApi(apiOption, text, x, y) {
             console.error("API error:", error);
             showResponse("API调用失败: " + error.message, x, y);
         })
-        .finally(() => removeFloatingElements());
+        .finally(() => {
+            // 移除加载提示
+            if (loader.parentNode) {
+                document.body.removeChild(loader);
+            }
+            removeFloatingElements();
+        });
     }
 }
 
@@ -906,4 +1040,71 @@ const improvedStyles = `
 // 应用样式
 const styleElement = document.createElement('style');
 styleElement.textContent = improvedStyles;
-document.head.appendChild(styleElement); 
+document.head.appendChild(styleElement);
+
+// 还可以添加额外的CSS来优化段落间距
+const additionalCSS = `
+    .ai-buddy-response-content p {
+        margin-top: 0;
+        margin-bottom: 10px;
+    }
+    
+    .ai-buddy-response-content ul,
+    .ai-buddy-response-content ol {
+        margin-top: 4px;
+        margin-bottom: 10px;
+    }
+    
+    .ai-buddy-response-content h1,
+    .ai-buddy-response-content h2,
+    .ai-buddy-response-content h3 {
+        margin-top: 16px;
+        margin-bottom: 8px;
+    }
+    
+    .ai-buddy-response-content h1:first-child,
+    .ai-buddy-response-content h2:first-child,
+    .ai-buddy-response-content h3:first-child {
+        margin-top: 0;
+    }
+    
+    .ai-buddy-response-content blockquote {
+        margin: 10px 0;
+    }
+`;
+
+// 将这段 CSS 添加到您现有的样式中
+
+// 添加全局文档点击事件，清理所有UI元素
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.ai-buddy-floating-button') && 
+        !event.target.closest('.ai-buddy-prompt-menu') && 
+        !event.target.closest('.ai-buddy-response-popup') &&
+        !event.target.closest('.ai-buddy-loader')) {
+        removeAllPopups();
+    }
+});
+
+// 添加ESC键监听，按ESC关闭所有弹窗
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        removeAllPopups();
+    }
+});
+
+// 添加加载指示器样式
+const loaderStyles = `
+    .ai-buddy-loader {
+        position: absolute;
+        background-color: white;
+        border-radius: 8px;
+        padding: 12px 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 10001;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        color: #333;
+    }
+`;
+
+// 将加载指示器样式添加到您现有的样式中 
