@@ -299,7 +299,7 @@ function updatePopupStyles() {
 updatePopupStyles();
 
 // 修改showResponse函数，确保新样式应用
-function showResponse(response, x, y, isStreaming = false) {
+function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   // 确保样式更新
   updatePopupStyles();
   
@@ -333,7 +333,13 @@ function showResponse(response, x, y, isStreaming = false) {
   
   // 如果不是流式输出，直接渲染全部内容
   if (!isStreaming) {
-      contentContainer.innerHTML = renderMarkdown(response);
+      if (isHtml) {
+          // 如果是HTML内容，直接设置innerHTML
+          contentContainer.innerHTML = response;
+      } else {
+          // 原来的markdown渲染
+          contentContainer.innerHTML = renderMarkdown(response);
+      }
   }
   // 如果是流式输出，内容会在流处理过程中逐步添加
   
@@ -1024,9 +1030,22 @@ function callExternalApi(apiOption, text, x, y) {
         .then(data => {
             console.log("API response:", data);
             
-            // 格式化并显示JSON响应
-            const formattedResponse = formatJsonResponse(data);
-            showResponse(formattedResponse, x, y);
+            // 使用修改后的 formatJsonResponse 函数来处理 JSON 响应
+            const formattedHtml = formatJsonResponse(data);
+            
+            // 使用现有的 showResponse 函数，但标记为 HTML 内容
+            const responsePopup = document.querySelector('.ai-buddy-response-popup');
+            if (responsePopup) {
+                const contentContainer = responsePopup.querySelector('.ai-buddy-response-content');
+                if (contentContainer) {
+                    // 直接设置 HTML 内容
+                    contentContainer.innerHTML = formattedHtml;
+                } else {
+                    showResponse(formattedHtml, x, y, false, true); // 添加参数表示这是HTML
+                }
+            } else {
+                showResponse(formattedHtml, x, y, false, true); // 添加参数表示这是HTML
+            }
         })
         .catch(error => {
             console.error("API error:", error);
@@ -1045,10 +1064,126 @@ function callExternalApi(apiOption, text, x, y) {
 // 格式化JSON响应
 function formatJsonResponse(data) {
     try {
-        return JSON.stringify(data, null, 2);
+        // 创建一个包含摘要和折叠JSON的HTML字符串
+        let html = '<div class="ai-buddy-summary-text">';
+        
+        // 提取关键信息作为摘要
+        if (data.status) {
+            html += `<strong>状态:</strong> ${data.status}<br>`;
+        }
+        if (data.id) {
+            html += `<strong>ID:</strong> ${data.id}<br>`;
+        }
+        if (data.amount) {
+            html += `<strong>金额:</strong> ${data.amount}<br>`;
+        }
+        if (data.total) {
+            html += `<strong>总额:</strong> ${data.total}<br>`;
+        }
+        
+        html += '</div>';
+        
+        // 添加折叠的JSON详情
+        html += '<details class="ai-buddy-json-details">';
+        html += '<summary>查看完整 JSON 数据</summary>';
+        html += '<div class="json-tree">';
+        html += renderJsonTree(data, 0, true); // 传递 true 表示第一层
+        html += '</div>';
+        html += '</details>';
+        
+        return html;
     } catch (e) {
         return "无法解析响应数据: " + e.message;
     }
+}
+
+// 新增函数: 渲染 JSON 树形结构
+function renderJsonTree(data, level = 0, isFirstLevel = false) {
+    if (data === null) {
+        return '<span class="json-null">null</span>';
+    }
+    
+    if (typeof data !== 'object') {
+        // 处理基本类型
+        if (typeof data === 'string') {
+            return `<span class="json-string">"${escapeHtml(data)}"</span>`;
+        }
+        if (typeof data === 'number') {
+            return `<span class="json-number">${data}</span>`;
+        }
+        if (typeof data === 'boolean') {
+            return `<span class="json-boolean">${data}</span>`;
+        }
+        return escapeHtml(String(data));
+    }
+    
+    // 处理数组或对象
+    const isArray = Array.isArray(data);
+    const openBracket = isArray ? '[' : '{';
+    const closeBracket = isArray ? ']' : '}';
+    
+    if (Object.keys(data).length === 0) {
+        return `${openBracket}${closeBracket}`;
+    }
+    
+    let html = '';
+    
+    // 对象或数组有内容，创建一个可折叠的结构
+    if (level > 0 || !isFirstLevel) {
+        html += `<details ${isFirstLevel ? 'open' : ''}>`;
+        html += `<summary>${openBracket}...</summary>`;
+    } else {
+        html += openBracket;
+    }
+    
+    html += '<div style="margin-left: 20px;">';
+    
+    // 遍历对象的属性或数组的元素
+    let i = 0;
+    for (const key in data) {
+        if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+        
+        const value = data[key];
+        const isLastItem = i === Object.keys(data).length - 1;
+        const comma = isLastItem ? '' : ',';
+        
+        html += '<div>';
+        
+        if (!isArray) {
+            // 显示键名 (对象的属性名)
+            html += `<span class="json-key">"${escapeHtml(key)}"</span>: `;
+        } else {
+            // 数组索引可选显示
+            // html += `<span class="json-key">${key}</span>: `;
+        }
+        
+        // 递归渲染值
+        html += renderJsonTree(value, level + 1);
+        html += comma;
+        html += '</div>';
+        
+        i++;
+    }
+    
+    html += '</div>';
+    
+    if (level > 0 || !isFirstLevel) {
+        html += `</details>`;
+    } else {
+        html += closeBracket;
+    }
+    
+    return html;
+}
+
+// 辅助函数: 转义 HTML 特殊字符
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 // 格式化ArXiv API响应
@@ -1253,4 +1388,96 @@ function removeAllMenus() {
     
     // 重置菜单全局变量
     promptMenu = null;
-} 
+}
+
+// 在此处添加 API 返回的 JSON 折叠功能
+const jsonDetailsStyles = `
+    .ai-buddy-json-details {
+        margin-top: 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    
+    .ai-buddy-json-details summary {
+        padding: 8px 12px;
+        cursor: pointer;
+        background-color: #f5f5f5;
+        font-size: 14px;
+        font-weight: 500;
+        color: #555;
+        user-select: none;
+    }
+    
+    .ai-buddy-json-details summary:hover {
+        background-color: #eaeaea;
+    }
+    
+    .ai-buddy-json-content {
+        max-height: 400px;
+        overflow: auto;
+        padding: 12px;
+        background-color: #f9f9f9;
+        font-family: monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+    }
+    
+    .ai-buddy-summary-text {
+        margin-bottom: 12px;
+        font-size: 15px;
+        line-height: 1.5;
+    }
+    
+    /* 嵌套的 JSON 对象样式 */
+    .json-tree {
+        font-family: monospace;
+        font-size: 13px;
+        line-height: 1.4;
+    }
+    
+    .json-tree details {
+        margin-left: 20px;
+    }
+    
+    .json-tree summary {
+        cursor: pointer;
+        color: #555;
+        background-color: transparent;
+        padding: 2px 5px;
+        border-radius: 3px;
+    }
+    
+    .json-tree summary:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    
+    .json-key {
+        color: #881391;
+        font-weight: bold;
+    }
+    
+    .json-string {
+        color: #1a1aa6;
+    }
+    
+    .json-number {
+        color: #1c6e00;
+    }
+    
+    .json-boolean {
+        color: #0d22aa;
+    }
+    
+    .json-null {
+        color: #777;
+    }
+`;
+
+// 添加 JSON 折叠样式到文档中
+const jsonStyleElement = document.createElement('style');
+jsonStyleElement.textContent = jsonDetailsStyles;
+document.head.appendChild(jsonStyleElement);
+
+// 将这段 CSS 添加到您现有的样式中
+// ... remaining existing code ... 

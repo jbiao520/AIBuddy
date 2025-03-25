@@ -31,9 +31,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         })
         .then(data => {
             console.log('LLM Response:', data);
-            sendResponse({data: data.response || "No response data from LLM"});
+            // 只发送需要显示的响应数据，将完整JSON放在单独字段中
+            sendResponse({
+                displayText: data.response || "No response data from LLM",
+                fullData: data, // 完整JSON数据，供用户选择性展开查看
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching from LLM:', error);
+            sendResponse({
+                displayText: "Error connecting to local LLM. Please check if it's running.",
+                error: error.message
+            });
         });
         
         return true; // 保持连接开放以进行异步响应
     }
-}); 
+});
+
