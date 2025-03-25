@@ -6,38 +6,49 @@ let selectedTextContent = "";
 const promptOptions = [
   { 
     name: "解释内容", 
-    subMenu: [
-      { name: "详细解释", prompt: "请详细解释以下内容的每个要点：" },
-      { name: "简单解释", prompt: "请用简单的话解释这段内容：" },
-      { name: "类比解释", prompt: "请用生动的类比来解释这段内容：" }
-    ]
+    prompt: "请解释以下内容："
   },
   { 
     name: "总结内容", 
-    subMenu: [
-      { name: "要点总结", prompt: "请总结以下内容的主要观点：" },
-      { name: "结构化总结", prompt: "请用结构化的方式总结这段内容：" },
-      { name: "一句话总结", prompt: "请用一句话总结这段内容的核心意思：" }
-    ]
+    prompt: "请总结以下内容："
   },
-  { 
-    name: "翻译内容", 
+  {
+    name: "API 调用",
     subMenu: [
-      { name: "翻译成中文", prompt: "请将以下内容翻译成中文：" },
-      { name: "翻译成英文", prompt: "请将以下内容翻译成英文：" },
-      { name: "意译", prompt: "请意译以下内容，保持原意但使表达更通顺：" }
-    ]
-  },
-  { 
-    name: "分析内容", 
-    subMenu: [
-      { name: "逻辑分析", prompt: "请分析以下内容的逻辑结构：" },
-      { name: "批判性分析", prompt: "请对以下内容进行批判性分析：" },
-      { name: "深度解读", prompt: "请深入解读以下内容的含义：" }
+      {
+        name: "ArXiv搜索",
+        isApi: true,
+        apiUrl: "http://export.arxiv.org/api/query",
+        method: "GET",
+        params: {
+            max_results: "5"  // 限制结果数量
+        },
+        paramName: "search_query"  // 选中的文字将作为search_query参数
+      },
+      {
+        name: "pay查询",
+        isApi: true,
+        apiUrl: "http://localhost:7070/api/service2/payments",
+        method: "POST",
+        params: {
+          "flow": "payment"
+        },
+        paramName: "id"  // 选中的文字将作为id参数
+      },
+      {
+        name: "order查询",
+        isApi: true,
+        apiUrl: "http://localhost:7070/api/service1/orders",
+        method: "POST",
+        params: {
+          "flow": "order"
+        },
+        paramName: "id"  // 选中的文字将作为id参数
+      }
     ]
   },
   {
-    name: "自定义提示...", 
+    name: "自定义提示...",
     isCustom: true
   }
 ];
@@ -279,16 +290,25 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
                 return;
             }
             
-            // 显示加载指示器
-            menuItem.innerHTML = '⏳ ' + option.name;
-            menuItem.style.pointerEvents = 'none';
-            
             // 获取按钮位置
             let x = 0, y = 0;
             if (floatingButton) {
                 x = parseInt(floatingButton.dataset.posX);
                 y = parseInt(floatingButton.dataset.posY);
             }
+            
+            // 处理 API 调用
+            if (option.isApi) {
+                // 显示加载指示器
+                menuItem.innerHTML = '⏳ ' + option.name;
+                menuItem.style.pointerEvents = 'none';
+                callExternalApi(option, selectedTextContent, x, y);
+                return;
+            }
+            
+            // 显示加载指示器
+            menuItem.innerHTML = '⏳ ' + option.name;
+            menuItem.style.pointerEvents = 'none';
             
             // 发送请求
             const fullPrompt = option.prompt + " " + selectedTextContent;
@@ -401,4 +421,247 @@ function findOptionByElement(element) {
     }
     
     return null;
-} 
+}
+
+// 修改 showMenu 函数以支持子菜单
+function showMenu(x, y, parentOption = null) {
+    if (promptMenu) {
+        document.body.removeChild(promptMenu);
+        promptMenu = null;
+    }
+    
+    promptMenu = document.createElement('div');
+    promptMenu.className = 'ai-buddy-prompt-menu';
+    promptMenu.style.left = x + 'px';
+    promptMenu.style.top = y + 'px';
+    
+    const options = parentOption ? parentOption.subMenu : promptOptions;
+    
+    options.forEach((option, index) => {
+        const item = document.createElement('div');
+        item.className = 'ai-buddy-menu-item';
+        
+        if (option.subMenu) {
+            item.innerHTML = `${option.name} <span class="menu-arrow">▶</span>`;
+        } else {
+            item.textContent = option.name;
+        }
+        
+        // 处理子菜单悬停
+        if (option.subMenu) {
+            item.addEventListener('mouseenter', function(e) {
+                const rect = item.getBoundingClientRect();
+                showMenu(rect.right + window.scrollX, rect.top + window.scrollY, option);
+            });
+            
+            // 有子菜单的项不需要点击处理
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        } else {
+            // 处理点击事件
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("Menu item clicked:", option); // 调试日志
+                
+                if (option.isApi) {
+                    // API 调用处理
+                    console.log("Calling API:", option.apiUrl);
+                    callExternalApi(option, selectedTextContent, x, y);
+                } else if (option.isCustom) {
+                    showCustomPromptInput(x, y);
+                } else {
+                    // 普通 prompt 处理
+                    sendPromptToLLM(option.prompt + " " + selectedTextContent, x, y);
+                }
+            });
+        }
+        
+        promptMenu.appendChild(item);
+    });
+    
+    document.body.appendChild(promptMenu);
+}
+
+// API 调用函数
+function callExternalApi(apiOption, text, x, y) {
+    console.log("Making API call with text:", text);
+    
+    // 显示加载提示
+    showResponsePopup("正在处理...", x, y);
+    
+    let url = apiOption.apiUrl;
+    
+    // 创建参数对象的副本
+    let params = { ...apiOption.params };
+    
+    // 如果指定了特定的参数名，将选中文字放入该参数
+    if (apiOption.paramName) {
+        params[apiOption.paramName] = text;
+    } else {
+        // 默认将文字放入text参数
+        params.text = text;
+    }
+    
+    // 处理GET请求
+    if (apiOption.method === 'GET') {
+        const queryString = Object.keys(params)
+            .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+            .join('&');
+        url = `${url}?${queryString}`;
+        
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/xml'  // ArXiv API返回XML
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.text();  // 获取XML响应
+        })
+        .then(data => {
+            console.log("API response:", data);
+            
+            // 如果是ArXiv API，格式化XML为可读形式
+            if (apiOption.apiUrl.includes('arxiv.org')) {
+                const formattedResponse = formatArxivResponse(data);
+                showResponsePopup(formattedResponse, x, y);
+            } else {
+                showResponsePopup(data, x, y);
+            }
+        })
+        .catch(error => {
+            console.error("API error:", error);
+            showResponsePopup("API调用失败: " + error.message, x, y);
+        })
+        .finally(() => removeFloatingElements());
+    } else {
+        // POST请求
+        fetch(url, {
+            method: apiOption.method || 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(params)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("API response:", data);
+            
+            // 格式化并显示JSON响应
+            const formattedResponse = formatJsonResponse(data);
+            showResponsePopup(formattedResponse, x, y);
+        })
+        .catch(error => {
+            console.error("API error:", error);
+            showResponsePopup("API调用失败: " + error.message, x, y);
+        })
+        .finally(() => removeFloatingElements());
+    }
+}
+
+// 格式化JSON响应
+function formatJsonResponse(data) {
+    try {
+        return JSON.stringify(data, null, 2);
+    } catch (e) {
+        return "无法解析响应数据: " + e.message;
+    }
+}
+
+// 格式化ArXiv API响应
+function formatArxivResponse(xmlString) {
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+        
+        // 提取论文信息
+        const entries = xmlDoc.getElementsByTagName("entry");
+        let result = "";
+        
+        if (entries.length === 0) {
+            return "未找到相关论文";
+        }
+        
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            
+            // 获取标题、作者、摘要和链接
+            const title = entry.getElementsByTagName("title")[0]?.textContent || "无标题";
+            const published = entry.getElementsByTagName("published")[0]?.textContent || "";
+            const summary = entry.getElementsByTagName("summary")[0]?.textContent || "无摘要";
+            
+            // 获取所有作者
+            const authors = entry.getElementsByTagName("author");
+            let authorList = "";
+            for (let j = 0; j < authors.length; j++) {
+                const name = authors[j].getElementsByTagName("name")[0]?.textContent || "";
+                authorList += name + (j < authors.length - 1 ? ", " : "");
+            }
+            
+            // 获取PDF链接
+            const links = entry.getElementsByTagName("link");
+            let pdfLink = "";
+            for (let j = 0; j < links.length; j++) {
+                if (links[j].getAttribute("title") === "pdf") {
+                    pdfLink = links[j].getAttribute("href") || "";
+                    break;
+                }
+            }
+            
+            // 格式化日期
+            const pubDate = published ? new Date(published).toLocaleDateString() : "";
+            
+            // 构建论文信息块
+            result += `论文 ${i+1}:\n`;
+            result += `标题: ${title.trim()}\n`;
+            result += `作者: ${authorList}\n`;
+            if (pubDate) result += `发布日期: ${pubDate}\n`;
+            if (pdfLink) result += `PDF链接: ${pdfLink}\n`;
+            result += `摘要: ${summary.trim().substring(0, 300)}${summary.length > 300 ? "..." : ""}\n\n`;
+        }
+        
+        return result;
+    } catch (e) {
+        console.error("Error parsing ArXiv response:", e);
+        return "无法解析ArXiv响应数据: " + e.message;
+    }
+}
+
+// 添加相关的 CSS 样式
+const additionalStyles = `
+    .menu-arrow {
+        float: right;
+        margin-left: 8px;
+        font-size: 10px;
+        color: #666;
+    }
+    
+    .ai-buddy-menu-item:hover {
+        background-color: #f0f0f0;
+    }
+    
+    .ai-buddy-menu-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        white-space: nowrap;
+    }
+`;
+
+// 将新样式添加到现有样式中
+style.textContent += additionalStyles; 
