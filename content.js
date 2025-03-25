@@ -133,7 +133,7 @@ function sendPromptToLLM(prompt, x, y) {
             
             if (chrome.runtime.lastError) {
                 console.error("Chrome runtime error:", chrome.runtime.lastError);
-                showResponsePopup("Error: " + chrome.runtime.lastError.message, x, y);
+                showResponse(response, x, y);
             } else {
                 // More flexible response handling
                 let responseText = "";
@@ -148,18 +148,16 @@ function sendPromptToLLM(prompt, x, y) {
                     responseText = response;
                 } else if (response && response.error) {
                     responseText = "Error: " + response.error;
-                } else if (response) {
+                } else {
                     // Try to convert entire response object to string
                     try {
                         responseText = "Raw response: " + JSON.stringify(response);
                     } catch (e) {
                         responseText = "Received response in unknown format";
                     }
-                } else {
-                    responseText = "No response received";
                 }
                 
-                showResponsePopup(responseText, x, y);
+                showResponse(responseText, x, y);
             }
             
             // Remove floating elements
@@ -373,30 +371,124 @@ function removeFloatingElements() {
     removeAllSubmenus();
 }
 
-function showResponsePopup(response, x, y) {
+// 增强的Markdown渲染函数
+function renderMarkdown(text) {
+    // 处理代码块 (```code```)
+    text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+    
+    // 处理行内代码 (`code`)
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // 处理粗体 (**text**)
+    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // 处理斜体 (*text*)
+    text = text.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
+    
+    // 处理标题 (## Heading)
+    text = text.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+    text = text.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+    text = text.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
+    
+    // 处理链接 [text](url)
+    text = text.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+    
+    // 处理无序列表
+    let inList = false;
+    let listType = '';
+    
+    // 先分割成行处理列表
+    let lines = text.split('\n');
+    let result = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        
+        // 处理无序列表项
+        const ulMatch = line.match(/^[\*\-] (.*)$/);
+        // 处理有序列表项
+        const olMatch = line.match(/^(\d+)\. (.*)$/);
+        
+        if (ulMatch) {
+            if (!inList || listType !== 'ul') {
+                if (inList) {
+                    result.push(`</${listType}>`);
+                }
+                result.push('<ul>');
+                inList = true;
+                listType = 'ul';
+            }
+            result.push(`<li>${ulMatch[1]}</li>`);
+        }
+        else if (olMatch) {
+            if (!inList || listType !== 'ol') {
+                if (inList) {
+                    result.push(`</${listType}>`);
+                }
+                result.push('<ol>');
+                inList = true;
+                listType = 'ol';
+            }
+            result.push(`<li>${olMatch[2]}</li>`);
+        }
+        else {
+            if (inList) {
+                result.push(`</${listType}>`);
+                inList = false;
+            }
+            
+            // 处理引用块
+            if (line.startsWith('> ')) {
+                result.push(`<blockquote>${line.substring(2)}</blockquote>`);
+            }
+            // 处理水平线
+            else if (line.match(/^-{3,}$/) || line.match(/^\*{3,}$/)) {
+                result.push('<hr>');
+            }
+            // 普通段落
+            else if (line.trim() !== '') {
+                result.push(`<p>${line}</p>`);
+            }
+            else {
+                result.push('');  // 保留空行
+            }
+        }
+    }
+    
+    // 结束列表（如果在列表中）
+    if (inList) {
+        result.push(`</${listType}>`);
+    }
+    
+    return result.join('\n');
+}
+
+// 修改响应显示函数
+function showResponse(response, x, y) {
     const popup = document.createElement('div');
     popup.className = 'ai-buddy-response-popup';
     
-    // Create content container with scrolling
+    // 创建内容容器
     const contentContainer = document.createElement('div');
     contentContainer.className = 'ai-buddy-response-content';
-    contentContainer.textContent = response;
+    
+    // 使用增强的Markdown渲染函数
+    contentContainer.innerHTML = renderMarkdown(response);
+    
     popup.appendChild(contentContainer);
     
-    // Position popup
-    popup.style.left = `${x}px`;
-    popup.style.top = `${y}px`;
+    // 定位弹窗，考虑屏幕边缘
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
     
-    // Add close button
+    popup.style.left = `${Math.min(x, viewportWidth - 500)}px`;
+    popup.style.top = `${Math.min(y, viewportHeight - 400)}px`;
+    
+    // 添加关闭按钮
     const closeButton = document.createElement('button');
     closeButton.className = 'ai-buddy-close-button';
     closeButton.textContent = '×';
-    closeButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (popup.parentNode) {
-            document.body.removeChild(popup);
-        }
-    });
+    closeButton.onclick = () => document.body.removeChild(popup);
     popup.appendChild(closeButton);
     
     document.body.appendChild(popup);
@@ -490,7 +582,7 @@ function callExternalApi(apiOption, text, x, y) {
     console.log("Making API call with text:", text);
     
     // 显示加载提示
-    showResponsePopup("正在处理...", x, y);
+    showResponse("正在处理...", x, y);
     
     let url = apiOption.apiUrl;
     
@@ -530,14 +622,14 @@ function callExternalApi(apiOption, text, x, y) {
             // 如果是ArXiv API，格式化XML为可读形式
             if (apiOption.apiUrl.includes('arxiv.org')) {
                 const formattedResponse = formatArxivResponse(data);
-                showResponsePopup(formattedResponse, x, y);
+                showResponse(formattedResponse, x, y);
             } else {
-                showResponsePopup(data, x, y);
+                showResponse(data, x, y);
             }
         })
         .catch(error => {
             console.error("API error:", error);
-            showResponsePopup("API调用失败: " + error.message, x, y);
+            showResponse("API调用失败: " + error.message, x, y);
         })
         .finally(() => removeFloatingElements());
     } else {
@@ -561,11 +653,11 @@ function callExternalApi(apiOption, text, x, y) {
             
             // 格式化并显示JSON响应
             const formattedResponse = formatJsonResponse(data);
-            showResponsePopup(formattedResponse, x, y);
+            showResponse(formattedResponse, x, y);
         })
         .catch(error => {
             console.error("API error:", error);
-            showResponsePopup("API调用失败: " + error.message, x, y);
+            showResponse("API调用失败: " + error.message, x, y);
         })
         .finally(() => removeFloatingElements());
     }
@@ -639,29 +731,179 @@ function formatArxivResponse(xmlString) {
     }
 }
 
-// 添加相关的 CSS 样式
-const additionalStyles = `
-    .menu-arrow {
-        float: right;
-        margin-left: 8px;
-        font-size: 10px;
-        color: #666;
+// 更新样式，使弹窗更宽并优化Markdown样式
+const improvedStyles = `
+    .ai-buddy-response-popup {
+        position: absolute;
+        width: 480px;  /* 更宽的弹窗 */
+        max-width: 90vw; /* 响应式设计 */
+        max-height: 70vh;
+        background-color: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        z-index: 10001;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        font-size: 15px;
+        line-height: 1.6;
+        color: #333;
+    }
+
+    .ai-buddy-response-content {
+        max-height: calc(70vh - 50px);
+        overflow-y: auto;
+        padding-right: 12px;
     }
     
-    .ai-buddy-menu-item:hover {
-        background-color: #f0f0f0;
+    /* 标题样式 */
+    .ai-buddy-response-content h1 {
+        font-size: 1.4em;
+        margin-top: 16px;
+        margin-bottom: 12px;
+        color: #111;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 6px;
     }
     
-    .ai-buddy-menu-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 12px;
+    .ai-buddy-response-content h2 {
+        font-size: 1.3em;
+        margin-top: 14px;
+        margin-bottom: 10px;
+        color: #222;
+    }
+    
+    .ai-buddy-response-content h3 {
+        font-size: 1.2em;
+        margin-top: 12px;
+        margin-bottom: 8px;
+        color: #333;
+    }
+    
+    /* 段落样式 */
+    .ai-buddy-response-content p {
+        margin-bottom: 12px;
+        line-height: 1.6;
+    }
+    
+    /* 加粗与斜体 */
+    .ai-buddy-response-content strong {
+        font-weight: 600;
+        color: #000;
+    }
+    
+    .ai-buddy-response-content em {
+        font-style: italic;
+    }
+    
+    /* 列表样式 */
+    .ai-buddy-response-content ul, 
+    .ai-buddy-response-content ol {
+        padding-left: 24px;
+        margin-bottom: 14px;
+        margin-top: 8px;
+    }
+    
+    .ai-buddy-response-content li {
+        margin-bottom: 6px;
+    }
+    
+    /* 代码样式 */
+    .ai-buddy-response-content code {
+        font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+        background-color: #f6f8fa;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-size: 85%;
+    }
+    
+    .ai-buddy-response-content pre {
+        background-color: #f6f8fa;
+        padding: 12px;
+        border-radius: 6px;
+        overflow-x: auto;
+        margin: 12px 0;
+    }
+    
+    .ai-buddy-response-content pre code {
+        background-color: transparent;
+        padding: 0;
+    }
+    
+    /* 引用块 */
+    .ai-buddy-response-content blockquote {
+        border-left: 4px solid #dfe2e5;
+        padding-left: 16px;
+        margin-left: 0;
+        margin-right: 0;
+        margin-top: 12px;
+        margin-bottom: 12px;
+        color: #6a737d;
+    }
+    
+    /* 链接样式 */
+    .ai-buddy-response-content a {
+        color: #0366d6;
+        text-decoration: none;
+    }
+    
+    .ai-buddy-response-content a:hover {
+        text-decoration: underline;
+    }
+    
+    /* 水平线 */
+    .ai-buddy-response-content hr {
+        height: 1px;
+        background-color: #e1e4e8;
+        border: none;
+        margin: 16px 0;
+    }
+    
+    /* 自定义滚动条 */
+    .ai-buddy-response-content::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .ai-buddy-response-content::-webkit-scrollbar-thumb {
+        background-color: #d1d5db;
+        border-radius: 4px;
+    }
+    
+    .ai-buddy-response-content::-webkit-scrollbar-thumb:hover {
+        background-color: #a8adb3;
+    }
+    
+    .ai-buddy-response-content::-webkit-scrollbar-track {
+        background-color: #f1f1f1;
+        border-radius: 4px;
+    }
+    
+    /* 关闭按钮样式 */
+    .ai-buddy-close-button {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: none;
+        border: none;
+        font-size: 20px;
         cursor: pointer;
+        color: #666;
+        padding: 6px;
+        border-radius: 50%;
+        line-height: 1;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         transition: background-color 0.2s;
-        white-space: nowrap;
+    }
+    
+    .ai-buddy-close-button:hover {
+        background-color: #f0f0f0;
     }
 `;
 
-// 将新样式添加到现有样式中
-style.textContent += additionalStyles; 
+// 应用样式
+const styleElement = document.createElement('style');
+styleElement.textContent = improvedStyles;
+document.head.appendChild(styleElement); 
