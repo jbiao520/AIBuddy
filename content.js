@@ -578,14 +578,6 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
       }
     };
     
-    // 添加按回车键发送功能
-    followupInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        followupButton.click();
-      }
-    });
-    
     followupContainer.appendChild(followupInput);
     followupContainer.appendChild(followupButton);
     
@@ -1628,14 +1620,6 @@ function showApiResponse(data, x, y) {
                         contentContainer.scrollTop = contentContainer.scrollHeight;
                     }
                 };
-                
-                // 更新回车键处理
-                followupInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        followupButton.click();
-                    }
-                });
             }
         }
     }
