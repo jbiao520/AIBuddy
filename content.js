@@ -138,7 +138,7 @@ document.addEventListener('click', (event) => {
 });
 
 // 修改发送到LLM的函数，确保关闭所有菜单
-function sendToLLM(prompt, x, y) {
+function sendToLLM(prompt, x, y, appendToExisting = false) {
     // 关闭所有菜单
     removeAllMenus();
     
@@ -146,11 +146,30 @@ function sendToLLM(prompt, x, y) {
     const controller = new AbortController();
     const signal = controller.signal;
     
-    // 立即显示一个空的响应弹窗
-    showResponse("", x, y, true);
+    let existingPopup = null;
+    let contentContainer = null;
     
-    // 获取刚创建的响应弹窗内容容器
-    const contentContainer = document.querySelector('.ai-buddy-response-content');
+    // 检查是否需要在现有弹窗中追加内容
+    if (appendToExisting) {
+        existingPopup = document.querySelector('.ai-buddy-response-popup');
+        if (existingPopup) {
+            contentContainer = existingPopup.querySelector('.ai-buddy-response-content');
+            
+            // 创建对话分隔线
+            const separator = document.createElement('div');
+            separator.className = 'ai-buddy-conversation-separator';
+            separator.innerHTML = '<hr><div class="separator-text">新的回答</div>';
+            contentContainer.appendChild(separator);
+        }
+    }
+    
+    // 如果没有现有的弹窗或内容容器，创建一个新的
+    if (!existingPopup || !contentContainer) {
+        // 立即显示一个空的响应弹窗
+        showResponse("", x, y, true);
+        contentContainer = document.querySelector('.ai-buddy-response-content');
+    }
+    
     if (!contentContainer) {
         console.error("找不到响应内容容器");
         return;
@@ -192,18 +211,34 @@ function sendToLLM(prompt, x, y) {
         if (!actionBar.querySelector('.ai-buddy-copy-button')) {
             createCopyButton(actionBar, outputContainer);
         }
+        
+        // 启用跟进输入框
+        enableFollowupInput();
     };
     
     if (actionBar) {
+        // 清除之前的终止按钮
+        const oldStopButtons = actionBar.querySelectorAll('.ai-buddy-stop-button');
+        oldStopButtons.forEach(btn => {
+            if (!btn.disabled) {
+                btn.textContent = '已取消';
+                btn.disabled = true;
+                btn.classList.add('stopped');
+            }
+        });
+        
         actionBar.appendChild(stopButton);
     }
     
+    // 禁用跟进输入框，直到回答完成
+    disableFollowupInput();
+    
     // 变量跟踪是否用户手动滚动了
     let userHasScrolled = false;
-    let lastScrollTop = 0;
+    let lastScrollTop = contentContainer.scrollTop;
     
     // 监听滚动事件
-    contentContainer.addEventListener('scroll', () => {
+    const scrollHandler = () => {
         if (contentContainer.scrollTop < lastScrollTop) {
             userHasScrolled = true;
         }
@@ -212,7 +247,9 @@ function sendToLLM(prompt, x, y) {
             userHasScrolled = false;
         }
         lastScrollTop = contentContainer.scrollTop;
-    });
+    };
+    
+    contentContainer.addEventListener('scroll', scrollHandler);
     
     console.log("发送到LLM的提示:", prompt);
     
@@ -252,7 +289,18 @@ function sendToLLM(prompt, x, y) {
                     
                     // 添加复制按钮
                     if (!actionBar.querySelector('.ai-buddy-copy-button')) {
-                        createCopyButton(actionBar, outputContainer);
+                        createCopyButton(actionBar, contentContainer);
+                    }
+                    
+                    // 启用跟进输入框
+                    enableFollowupInput();
+                    
+                    // 如果是新弹窗，自动聚焦到跟进输入框
+                    if (!appendToExisting) {
+                        const followupInput = document.querySelector('.ai-buddy-followup-input');
+                        if (followupInput) {
+                            followupInput.focus();
+                        }
                     }
                     
                     return;
@@ -302,9 +350,42 @@ function sendToLLM(prompt, x, y) {
         
         // 错误情况下也显示复制按钮
         if (!actionBar.querySelector('.ai-buddy-copy-button') && outputContainer.textContent.trim()) {
-            createCopyButton(actionBar, outputContainer);
+            createCopyButton(actionBar, contentContainer);
         }
+        
+        // 启用跟进输入框
+        enableFollowupInput();
     });
+}
+
+// 禁用跟进输入框
+function disableFollowupInput() {
+    const followupInput = document.querySelector('.ai-buddy-followup-input');
+    const followupButton = document.querySelector('.ai-buddy-followup-button');
+    
+    if (followupInput) {
+        followupInput.disabled = true;
+        followupInput.placeholder = '生成回答中，请稍候...';
+    }
+    
+    if (followupButton) {
+        followupButton.disabled = true;
+    }
+}
+
+// 启用跟进输入框
+function enableFollowupInput() {
+    const followupInput = document.querySelector('.ai-buddy-followup-input');
+    const followupButton = document.querySelector('.ai-buddy-followup-button');
+    
+    if (followupInput) {
+        followupInput.disabled = false;
+        followupInput.placeholder = '可以在这里输入跟进问题...';
+    }
+    
+    if (followupButton) {
+        followupButton.disabled = false;
+    }
 }
 
 // 创建复制按钮的函数
@@ -433,6 +514,51 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   // 如果是流式输出，内容会在流处理过程中逐步添加
   
   popup.appendChild(contentContainer);
+
+  // 添加二次提问输入框和按钮
+  const followupContainer = document.createElement('div');
+  followupContainer.className = 'ai-buddy-followup-container';
+  
+  const followupInput = document.createElement('textarea');
+  followupInput.className = 'ai-buddy-followup-input';
+  followupInput.placeholder = '可以在这里输入跟进问题...';
+  followupInput.rows = 2;
+  
+  const followupButton = document.createElement('button');
+  followupButton.className = 'ai-buddy-followup-button';
+  followupButton.textContent = '提问';
+  followupButton.onclick = () => {
+    const question = followupInput.value.trim();
+    if (question) {
+      // 在跟进容器上方插入用户问题
+      const userQuestionDiv = document.createElement('div');
+      userQuestionDiv.className = 'ai-buddy-user-question';
+      userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
+      followupContainer.parentNode.insertBefore(userQuestionDiv, followupContainer);
+      
+      // 构建完整提示，将部分历史包含在内
+      // 注意：如果历史太长，可能需要截断
+      const chatHistory = collectChatHistory();
+      const fullPrompt = `${chatHistory}\n\n我的新问题是：${question}`;
+      
+      // 调用LLM，指示追加到现有弹窗
+      followupInput.value = ''; // 清空输入框
+      sendToLLM(fullPrompt, x, y, true);
+    }
+  };
+  
+  // 添加按回车键发送功能
+  followupInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      followupButton.click();
+    }
+  });
+  
+  followupContainer.appendChild(followupInput);
+  followupContainer.appendChild(followupButton);
+  
+  popup.appendChild(followupContainer);
   
   // 定位弹窗，考虑滚动位置
   const viewportWidth = window.innerWidth;
@@ -455,6 +581,39 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   document.body.appendChild(popup);
   
   return contentContainer; // 返回内容容器，方便流式更新
+}
+
+// 收集对话历史
+function collectChatHistory() {
+  const contentContainer = document.querySelector('.ai-buddy-response-content');
+  if (!contentContainer) return '';
+  
+  let history = '';
+  
+  // 获取所有回答和问题
+  const answers = contentContainer.querySelectorAll('.ai-buddy-output-text');
+  const questions = contentContainer.querySelectorAll('.ai-buddy-user-question');
+  
+  // 如果内容太多，只获取最近的几轮对话
+  const maxHistory = 2; // 最多保留最近的几轮对话
+  const startIdx = Math.max(0, answers.length - maxHistory);
+  
+  // 拼接历史对话
+  for (let i = startIdx; i < answers.length; i++) {
+    const questionIndex = i - 1;
+    if (questionIndex >= 0 && questions[questionIndex]) {
+      history += `用户问题: ${questions[questionIndex].querySelector('.question-content').textContent}\n\n`;
+    }
+    history += `AI回答: ${answers[i].textContent}\n\n`;
+  }
+  
+  // 如果有最新的问题但还没有回答
+  if (questions.length > answers.length - 1) {
+    const lastQuestion = questions[questions.length - 1];
+    history += `用户问题: ${lastQuestion.querySelector('.question-content').textContent}\n\n`;
+  }
+  
+  return history;
 }
 
 // 添加光标动画的CSS
@@ -1623,6 +1782,9 @@ function showApiResponse(data, x, y) {
     if (contentContainer) {
         contentContainer.innerHTML = responseHtml;
         
+        // 保存原始数据供后续查询使用
+        contentContainer.dataset.originalJson = JSON.stringify(data);
+        
         // 绑定点击事件，让JSON树中的details元素可以折叠/展开
         const detailsElements = contentContainer.querySelectorAll('details');
         detailsElements.forEach(details => {
@@ -1638,4 +1800,137 @@ function showApiResponse(data, x, y) {
     }
     
     console.log("API响应已显示", typeof data === 'object' ? '(JSON)' : '(Text)');
-} 
+}
+
+// 添加跟进提问输入框的样式
+const followupStyles = `
+  .ai-buddy-followup-container {
+    margin-top: 16px;
+    border-top: 1px solid #eaeaea;
+    padding-top: 16px;
+    display: flex;
+    gap: 8px;
+  }
+  
+  .ai-buddy-followup-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: none;
+  }
+  
+  .ai-buddy-followup-input:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+  }
+  
+  .ai-buddy-followup-button {
+    padding: 8px 16px;
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    align-self: flex-end;
+  }
+  
+  .ai-buddy-followup-button:hover {
+    background-color: #3a80d2;
+  }
+`;
+
+// 添加跟进提问样式到文档中
+const followupStyleElement = document.createElement('style');
+followupStyleElement.textContent = followupStyles;
+document.head.appendChild(followupStyleElement);
+
+// 添加对话样式
+const conversationStyles = `
+  .ai-buddy-conversation-separator {
+    margin: 16px 0;
+    position: relative;
+    text-align: center;
+  }
+  
+  .ai-buddy-conversation-separator hr {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 0;
+  }
+  
+  .ai-buddy-conversation-separator .separator-text {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: white;
+    padding: 0 12px;
+    font-size: 12px;
+    color: #777;
+  }
+  
+  .ai-buddy-user-question {
+    margin: 12px 0;
+    padding: 8px 12px;
+    background-color: #f5f8ff;
+    border-left: 3px solid #4a90e2;
+    border-radius: 4px;
+  }
+  
+  .ai-buddy-user-question .question-header {
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 4px;
+    color: #4a6fa5;
+  }
+  
+  .ai-buddy-user-question .question-content {
+    font-size: 14px;
+  }
+  
+  .ai-buddy-followup-input:disabled {
+    background-color: #f5f5f5;
+    color: #999;
+  }
+  
+  .ai-buddy-followup-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
+`;
+
+// 添加对话样式到文档中
+const conversationStyleElement = document.createElement('style');
+conversationStyleElement.textContent = conversationStyles;
+document.head.appendChild(conversationStyleElement);
+
+// 添加API响应的样式
+const apiResponseStyles = `
+  .ai-buddy-api-response {
+    padding: 12px;
+    background-color: #f9fcff;
+    border: 1px solid #e5eef7;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+  
+  /* 为了区分API响应和LLM回答，给LLM回答添加一些样式 */
+  .ai-buddy-output-text {
+    padding: 12px;
+    background-color: #f8fff9;
+    border: 1px solid #e6f5e8;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+`;
+
+// 添加API响应样式到文档中
+const apiResponseStyleElement = document.createElement('style');
+apiResponseStyleElement.textContent = apiResponseStyles;
+document.head.appendChild(apiResponseStyleElement); 
