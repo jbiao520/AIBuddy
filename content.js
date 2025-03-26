@@ -437,10 +437,6 @@ function showCustomPromptInput(x, y) {
         
         const customPromptText = inputField.value.trim();
         if (customPromptText) {
-            // 先显示加载状态
-            const loadingMessage = "正在处理您的请求...";
-            showResponse(loadingMessage, x, y);
-            
             // 移除自定义提示框
             if (customPromptContainer.parentNode) {
                 document.body.removeChild(customPromptContainer);
@@ -458,32 +454,8 @@ function showCustomPromptInput(x, y) {
             // 组合提示文本和选中的内容
             const fullPrompt = customPromptText + " " + savedSelectedText;
             
-            // 调用LLM
-            fetch('http://localhost:11434/api/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: "gemma3:12b",
-                    prompt: fullPrompt,
-                    stream: false
-                })
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                // 显示LLM响应
-                showResponse(data.response || "无响应", x, y);
-            })
-            .catch(error => {
-                console.error("LLM调用错误:", error);
-                showResponse("调用LLM时出错: " + error.message, x, y);
-            });
+            // 使用流式输出调用LLM
+            sendToLLM(fullPrompt, x, y);
         }
     });
     buttonContainer.appendChild(submitButton);
