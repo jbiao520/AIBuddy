@@ -38,14 +38,14 @@ const promptOptions = [
     name: "API 调用",
     subMenu: [
       {
-        name: "ArXiv搜索",
+        name: "Get查询",
         isApi: true,
-        apiUrl: "http://export.arxiv.org/api/query",
+        apiUrl: "http://localhost:7070/api/service1/users",
         method: "GET",
         params: {
-            max_results: "5"  // 限制结果数量
+            name: "query"  
         },
-        paramName: "search_query"  // 选中的文字将作为search_query参数
+        paramName: "name"
       },
       {
         name: "pay查询",
@@ -1029,28 +1029,14 @@ function showMenu(x, y, parentOption = null) {
     adjustMenuPosition(promptMenu);
 }
 
-// API 调用函数
+// 更新API调用函数，确保GET和POST请求使用相同的JSON渲染
 function callExternalApi(apiOption, text, x, y) {
+    console.log("Making API call with text:", text);
+    
     // 显示加载提示
-    const loader = document.createElement('div');
-    loader.className = 'ai-buddy-loader';
-    loader.textContent = "正在处理...";
-    
-    // 这里 x 和 y 应该已经包含了滚动位置
-    loader.style.left = `${x}px`;
-    loader.style.top = `${y}px`;
-    
-    document.body.appendChild(loader);
-    
-    // 移除菜单
-    if (promptMenu && promptMenu.parentNode) {
-        document.body.removeChild(promptMenu);
-        promptMenu = null;
-    }
+    showResponse("正在处理...", x, y);
     
     let url = apiOption.apiUrl;
-    
-    // 创建参数对象的副本
     let params = { ...apiOption.params };
     
     // 如果指定了特定的参数名，将选中文字放入该参数
@@ -1061,94 +1047,102 @@ function callExternalApi(apiOption, text, x, y) {
         params.text = text;
     }
     
-    // 处理GET请求
-    if (apiOption.method === 'GET') {
-        const queryString = Object.keys(params)
-            .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-            .join('&');
-        url = `${url}?${queryString}`;
-        
-        fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/xml'  // ArXiv API返回XML
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.text();  // 获取XML响应
-        })
-        .then(data => {
-            console.log("API response:", data);
+    console.log("Request params:", params);
+    
+    try {
+        // 处理 GET 请求
+        if (apiOption.method === 'GET') {
+            const queryString = Object.keys(params)
+                .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+                .join('&');
+            url = `${url}?${queryString}`;
             
-            // 如果是ArXiv API，格式化XML为可读形式
-            if (apiOption.apiUrl.includes('arxiv.org')) {
-                const formattedResponse = formatArxivResponse(data);
-                showResponse(formattedResponse, x, y);
-            } else {
-                showResponse(data, x, y);
-            }
-        })
-        .catch(error => {
-            console.error("API error:", error);
-            showResponse("API调用失败: " + error.message, x, y);
-        })
-        .finally(() => {
-            // 移除加载提示
-            if (loader.parentNode) {
-                document.body.removeChild(loader);
-            }
-            removeFloatingElements();
-        });
-    } else {
-        // POST请求
-        fetch(url, {
-            method: apiOption.method || 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(params)
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log("API response:", data);
+            console.log("GET request to:", url);
             
-            // 使用修改后的 formatJsonResponse 函数来处理 JSON 响应
-            const formattedHtml = formatJsonResponse(data);
-            
-            // 使用现有的 showResponse 函数，但标记为 HTML 内容
-            const responsePopup = document.querySelector('.ai-buddy-response-popup');
-            if (responsePopup) {
-                const contentContainer = responsePopup.querySelector('.ai-buddy-response-content');
-                if (contentContainer) {
-                    // 直接设置 HTML 内容
-                    contentContainer.innerHTML = formattedHtml;
-                } else {
-                    showResponse(formattedHtml, x, y, false, true); // 添加参数表示这是HTML
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': '*/*'
                 }
-            } else {
-                showResponse(formattedHtml, x, y, false, true); // 添加参数表示这是HTML
-            }
-        })
-        .catch(error => {
-            console.error("API error:", error);
-            showResponse("API调用失败: " + error.message, x, y);
-        })
-        .finally(() => {
-            // 移除加载提示
-            if (loader.parentNode) {
-                document.body.removeChild(loader);
-            }
-            removeFloatingElements();
-        });
+            })
+            .then(response => {
+                console.log("Response status:", response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // 检查内容类型
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return response.json().then(data => {
+                        // 使用折叠JSON视图显示JSON数据
+                        showApiResponse(data, x, y);
+                    });
+                } else {
+                    // 对于非JSON响应，以文本形式显示
+                    return response.text().then(text => {
+                        // 尝试判断是否可能是JSON格式的文本
+                        try {
+                            const jsonData = JSON.parse(text);
+                            showApiResponse(jsonData, x, y);
+                        } catch (e) {
+                            // 不是JSON，直接显示文本
+                            showResponse(text, x, y);
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error("API error:", error);
+                showResponse("API 调用失败: " + error.message, x, y);
+            });
+        } else {
+            // POST 请求，保持现有逻辑，但确保使用相同的渲染方式
+            console.log("POST request to:", url, "with body:", JSON.stringify(params));
+            
+            fetch(url, {
+                method: apiOption.method || 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': '*/*'
+                },
+                body: JSON.stringify(params)
+            })
+            .then(response => {
+                console.log("Response status:", response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // 检查内容类型
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return response.json().then(data => {
+                        // 使用折叠JSON视图显示JSON数据
+                        showApiResponse(data, x, y);
+                    });
+                } else {
+                    // 对于非JSON响应，以文本形式显示
+                    return response.text().then(text => {
+                        // 尝试判断是否可能是JSON格式的文本
+                        try {
+                            const jsonData = JSON.parse(text);
+                            showApiResponse(jsonData, x, y);
+                        } catch (e) {
+                            // 不是JSON，直接显示文本
+                            showResponse(text, x, y);
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error("API error:", error);
+                showResponse("API 调用失败: " + error.message, x, y);
+            });
+        }
+    } catch (error) {
+        console.error("Error in API call setup:", error);
+        showResponse("API 调用设置错误: " + error.message, x, y);
     }
 }
 
@@ -1612,4 +1606,36 @@ const stopButtonStyles = `
 // 将终止按钮样式添加到文档中
 const stopButtonStyleElement = document.createElement('style');
 stopButtonStyleElement.textContent = stopButtonStyles;
-document.head.appendChild(stopButtonStyleElement); 
+document.head.appendChild(stopButtonStyleElement);
+
+// 添加显示API响应的函数
+function showApiResponse(data, x, y) {
+    // 移除所有菜单
+    removeAllMenus();
+    
+    // 使用HTML方式显示响应，这样可以包含交互式JSON渲染
+    const responseHtml = formatJsonResponse(data);
+    
+    // 显示响应，传入true表示这是HTML内容
+    const contentContainer = showResponse("", x, y, false, true);
+    
+    // 在内容容器中设置格式化后的JSON
+    if (contentContainer) {
+        contentContainer.innerHTML = responseHtml;
+        
+        // 绑定点击事件，让JSON树中的details元素可以折叠/展开
+        const detailsElements = contentContainer.querySelectorAll('details');
+        detailsElements.forEach(details => {
+            // 已经有原生的折叠/展开功能，只需确保summary可点击
+            details.querySelector('summary').style.cursor = 'pointer';
+        });
+        
+        // 添加复制按钮
+        const actionBar = contentContainer.parentNode.querySelector('.ai-buddy-action-bar');
+        if (actionBar && !actionBar.querySelector('.ai-buddy-copy-button')) {
+            createCopyButton(actionBar, contentContainer);
+        }
+    }
+    
+    console.log("API响应已显示", typeof data === 'object' ? '(JSON)' : '(Text)');
+} 
