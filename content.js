@@ -2,6 +2,19 @@ let floatingButton = null;
 let promptMenu = null;
 let selectedTextContent = "";
 
+// 动态加载CSS样式
+function loadStyles() {
+  const styleElement = document.createElement('link');
+  styleElement.rel = 'stylesheet';
+  styleElement.href = chrome.runtime.getURL('styles.css');
+  document.head.appendChild(styleElement);
+  
+  console.log("AI Buddy 样式已加载");
+}
+
+// 初始化时加载样式
+loadStyles();
+
 // Define different prompt options
 const promptOptions = [
   {
@@ -86,14 +99,14 @@ document.addEventListener('mouseup', (event) => {
             floatingButton.className = 'ai-buddy-floating-button';
             floatingButton.innerHTML = '🤖';
             
-            // Position button near mouse
+            // Position button near mouse, using pageX/Y which includes scroll position
             const x = event.pageX + 10;
             const y = event.pageY - 30;
             
             floatingButton.style.left = `${x}px`;
             floatingButton.style.top = `${y}px`;
             
-            // Mark button position for menu positioning
+            // Store both page coordinates (including scroll) for future use
             floatingButton.dataset.posX = x;
             floatingButton.dataset.posY = y;
             
@@ -102,10 +115,10 @@ document.addEventListener('mouseup', (event) => {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                // Show main menu
+                // Get current button position (including any scrolling that happened)
                 const buttonRect = floatingButton.getBoundingClientRect();
-                const menuX = buttonRect.left;
-                const menuY = buttonRect.bottom + 5;
+                const menuX = buttonRect.left + window.scrollX;
+                const menuY = buttonRect.bottom + window.scrollY + 5;
                 
                 createPromptMenu(selectedTextContent, menuX, menuY);
             });
@@ -330,33 +343,6 @@ function createCopyButton(actionBar, outputContainer) {
     return copyButton;
 }
 
-// 添加复制按钮样式
-const copyButtonStyles = `
-    .ai-buddy-copy-button {
-        background-color: #2b7de9;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        padding: 6px 12px;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .ai-buddy-copy-button:hover {
-        background-color: #1a68c7;
-    }
-    
-    .ai-buddy-copy-button.copied {
-        background-color: #28a745;
-    }
-`;
-
-// 将复制按钮样式添加到文档中
-const copyButtonStyleElement = document.createElement('style');
-copyButtonStyleElement.textContent = copyButtonStyles;
-document.head.appendChild(copyButtonStyleElement);
-
 // 确保弹窗宽度修改生效的方法
 function updatePopupStyles() {
   // 1. 创建或获取样式元素
@@ -448,12 +434,12 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   
   popup.appendChild(contentContainer);
   
-  // 定位弹窗
+  // 定位弹窗，考虑滚动位置
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   
-  popup.style.left = `${Math.min(x, viewportWidth - 500)}px`;
-  popup.style.top = `${Math.min(y, viewportHeight - 400)}px`;
+  popup.style.left = `${Math.min(x, window.scrollX + viewportWidth - 500)}px`;
+  popup.style.top = `${Math.min(y, window.scrollY + viewportHeight - 400)}px`;
   
   // 添加关闭按钮
   const closeButton = document.createElement('button');
@@ -513,6 +499,8 @@ function showCustomPromptInput(x, y) {
 
     const customPromptContainer = document.createElement('div');
     customPromptContainer.className = 'ai-buddy-custom-prompt';
+    
+    // 这里 x 和 y 应该已经包含了滚动位置
     customPromptContainer.style.left = `${x}px`;
     customPromptContainer.style.top = `${y + 40}px`;
 
@@ -615,6 +603,8 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
         menu.classList.add('ai-buddy-main-menu');
     }
 
+    // 确保位置考虑了页面滚动
+    // 注意：在调用此函数时已经传入了包含滚动的位置，所以不需要再加 window.scrollX/Y
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
 
@@ -633,7 +623,7 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
         
         menuItem.dataset.index = index;
         
-        // 处理鼠标悬停事件
+        // 修改子菜单悬停处理，确保正确考虑滚动位置
         if (option.subMenu) {
             let submenuTimeout;
             
@@ -971,7 +961,7 @@ function findOptionByElement(element) {
     return null;
 }
 
-// 修改 showMenu 函数以支持子菜单
+// 修改 showMenu 函数以考虑页面滚动
 function showMenu(x, y, parentOption = null) {
     if (promptMenu) {
         document.body.removeChild(promptMenu);
@@ -980,6 +970,8 @@ function showMenu(x, y, parentOption = null) {
     
     promptMenu = document.createElement('div');
     promptMenu.className = 'ai-buddy-prompt-menu';
+    
+    // 确保使用的是已经包含滚动的坐标
     promptMenu.style.left = x + 'px';
     promptMenu.style.top = y + 'px';
     
@@ -995,10 +987,11 @@ function showMenu(x, y, parentOption = null) {
             item.textContent = option.name;
         }
         
-        // 处理子菜单悬停
+        // 修改子菜单悬停处理，确保正确考虑滚动位置
         if (option.subMenu) {
             item.addEventListener('mouseenter', function(e) {
                 const rect = item.getBoundingClientRect();
+                // 确保添加滚动位置
                 showMenu(rect.right + window.scrollX, rect.top + window.scrollY, option);
             });
             
@@ -1031,6 +1024,9 @@ function showMenu(x, y, parentOption = null) {
     });
     
     document.body.appendChild(promptMenu);
+    
+    // 添加调整位置
+    adjustMenuPosition(promptMenu);
 }
 
 // API 调用函数
@@ -1039,8 +1035,11 @@ function callExternalApi(apiOption, text, x, y) {
     const loader = document.createElement('div');
     loader.className = 'ai-buddy-loader';
     loader.textContent = "正在处理...";
+    
+    // 这里 x 和 y 应该已经包含了滚动位置
     loader.style.left = `${x}px`;
     loader.style.top = `${y}px`;
+    
     document.body.appendChild(loader);
     
     // 移除菜单

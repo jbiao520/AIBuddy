@@ -1,152 +1,232 @@
+/* 浮动按钮样式 */
 .ai-buddy-floating-button {
     position: absolute;
-    width: 30px;
-    height: 30px;
+    width: 36px;
+    height: 36px;
     background-color: #4285f4;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    color: white;
+    font-size: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     cursor: pointer;
     z-index: 10000;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    transition: transform 0.2s;
+    transition: background-color 0.2s;
 }
 
 .ai-buddy-floating-button:hover {
-    transform: scale(1.1);
-    background-color: #1a73e8;
+    background-color: #3367d6;
 }
 
-.ai-buddy-response-popup {
+/* 菜单样式 */
+.ai-buddy-prompt-menu {
     position: absolute;
-    max-width: 350px;
-    min-width: 250px;
-    max-height: 350px;
     background-color: white;
     border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    min-width: 180px;
+    max-width: 280px;
     z-index: 10001;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    padding: 6px 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
-    line-height: 1.6;
-    color: #333;
+}
+
+.ai-buddy-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ai-buddy-menu-item:hover {
+    background-color: #f5f5f5;
+}
+
+.ai-buddy-menu-item .menu-arrow {
+    font-size: 10px;
+    color: #888;
+    margin-left: 8px;
+}
+
+.ai-buddy-menu-item.has-submenu {
+    cursor: default;
+}
+
+/* 响应弹窗样式 */
+.ai-buddy-response-popup {
+    position: absolute !important;
+    width: 600px !important;  /* 增加宽度 */
+    max-width: 90vw !important; 
+    max-height: 70vh !important;
+    background-color: white !important;
+    border-radius: 12px !important;
+    padding: 24px !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15) !important;
+    z-index: 10001 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif !important;
+    font-size: 15px !important;
+    line-height: 1.6 !important;
+    color: #333 !important;
+}
+
+.ai-buddy-response-content {
+    position: relative;
+    max-height: calc(70vh - 80px);
+    overflow-y: auto;
+    padding-right: 12px;
+}
+
+.ai-buddy-output-text {
+    padding-bottom: 24px; /* 为光标留出空间 */
+}
+
+.ai-buddy-cursor-container {
+    margin-top: 3px;
+}
+
+.ai-buddy-cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.2em;
+    background-color: #333;
+    margin-left: 2px;
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* 操作栏和按钮样式 */
+.ai-buddy-action-bar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 8px;
 }
 
 .ai-buddy-close-button {
     position: absolute;
-    top: 5px;
-    right: 5px;
-    background: none;
-    border: none;
-    font-size: 18px;
-    cursor: pointer;
-    color: #666;
-    padding: 0 5px;
+    right: 10px;
+    top: 10px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
+    background-color: #f0f0f0;
+    border: none;
+    color: #555;
+    font-size: 18px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s;
 }
 
 .ai-buddy-close-button:hover {
-    background-color: #f0f0f0;
+    background-color: #e0e0e0;
+}
+
+/* 终止按钮样式 */
+.ai-buddy-stop-button {
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-left: auto;
+}
+
+.ai-buddy-stop-button:hover {
+    background-color: #ff2222;
+}
+
+.ai-buddy-stop-button:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.ai-buddy-stop-button.stopped {
+    background-color: #666;
+}
+
+.ai-buddy-stop-button.completed {
+    background-color: #22aa22;
+}
+
+/* 复制按钮样式 */
+.ai-buddy-copy-button {
+    background-color: #2b7de9;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.ai-buddy-copy-button:hover {
+    background-color: #1a68c7;
+}
+
+.ai-buddy-copy-button.copied {
+    background-color: #28a745;
+}
+
+/* 加载指示器样式 */
+.ai-buddy-loader {
+    position: absolute;
+    background-color: white;
+    border-radius: 8px;
+    padding: 12px 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 10001;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
     color: #333;
 }
 
-.ai-buddy-prompt-menu {
-    position: absolute;
-    background-color: white;
-    min-width: 180px;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    z-index: 10001;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    font-size: 14px;
-    overflow: hidden;
-    padding: 4px 0;
-}
-
-.ai-buddy-submenu {
-    z-index: 10002;
-}
-
-.ai-buddy-menu-item {
-    padding: 8px 15px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    white-space: nowrap;
-    user-select: none;
-}
-
-.ai-buddy-menu-item.has-submenu {
-    position: relative;
-}
-
-.ai-buddy-menu-item:hover {
-    background-color: #f0f0f0;
-}
-
-.menu-arrow {
-    font-size: 10px;
-    margin-left: 8px;
-    color: #666;
-    pointer-events: none;
-}
-
-.ai-buddy-response-content {
-    max-height: 280px;
-    overflow-y: auto;
-    padding-right: 5px;
-    margin-bottom: 10px;
-    white-space: pre-wrap;
-}
-
-.ai-buddy-response-content::-webkit-scrollbar {
-    width: 8px;
-}
-
-.ai-buddy-response-content::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-.ai-buddy-response-content::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
-}
-
-.ai-buddy-response-content::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
-
+/* 自定义提示框样式 */
 .ai-buddy-custom-prompt {
     position: absolute;
-    width: 300px;
     background-color: white;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    padding: 16px;
+    width: 300px;
     z-index: 10001;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .ai-buddy-custom-label {
+    font-size: 14px;
+    font-weight: 600;
     margin-bottom: 8px;
-    font-weight: 500;
+    color: #333;
 }
 
 .ai-buddy-custom-input {
     width: 100%;
-    padding: 8px;
+    padding: 8px 12px;
     border: 1px solid #ddd;
-    border-radius: 4px;
-    margin-bottom: 10px;
-    font-family: inherit;
+    border-radius: 6px;
     font-size: 14px;
     resize: vertical;
+    font-family: inherit;
+    margin-bottom: 12px;
 }
 
 .ai-buddy-custom-buttons {
@@ -158,10 +238,11 @@
 .ai-buddy-custom-submit,
 .ai-buddy-custom-cancel {
     padding: 6px 12px;
-    border: none;
     border-radius: 4px;
+    border: none;
+    font-size: 13px;
     cursor: pointer;
-    font-size: 14px;
+    transition: background-color 0.2s;
 }
 
 .ai-buddy-custom-submit {
@@ -174,14 +255,138 @@
 }
 
 .ai-buddy-custom-cancel {
-    background-color: #f1f1f1;
+    background-color: #f2f2f2;
     color: #333;
 }
 
 .ai-buddy-custom-cancel:hover {
-    background-color: #e4e4e4;
+    background-color: #e0e0e0;
 }
 
-.ai-buddy-prompt-menu.hiding {
-    opacity: 0;
+/* Markdown内容样式 */
+.ai-buddy-response-content p {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.ai-buddy-response-content ul,
+.ai-buddy-response-content ol {
+    margin-top: 4px;
+    margin-bottom: 10px;
+}
+
+.ai-buddy-response-content h1,
+.ai-buddy-response-content h2,
+.ai-buddy-response-content h3 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+.ai-buddy-response-content h1:first-child,
+.ai-buddy-response-content h2:first-child,
+.ai-buddy-response-content h3:first-child {
+    margin-top: 0;
+}
+
+.ai-buddy-response-content blockquote {
+    margin: 10px 0;
+}
+
+.ai-buddy-response-content code {
+    background-color: #f5f5f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.ai-buddy-response-content pre code {
+    display: block;
+    padding: 10px;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    background-color: #f8f8f8;
+    border-radius: 5px;
+}
+
+/* JSON树形结构样式 */
+.ai-buddy-json-details {
+    margin-top: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.ai-buddy-json-details summary {
+    padding: 8px 12px;
+    cursor: pointer;
+    background-color: #f5f5f5;
+    font-size: 14px;
+    font-weight: 500;
+    color: #555;
+    user-select: none;
+}
+
+.ai-buddy-json-details summary:hover {
+    background-color: #eaeaea;
+}
+
+.ai-buddy-json-content {
+    max-height: 400px;
+    overflow: auto;
+    padding: 12px;
+    background-color: #f9f9f9;
+    font-family: monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+}
+
+.ai-buddy-summary-text {
+    margin-bottom: 12px;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+/* 嵌套的 JSON 对象样式 */
+.json-tree {
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.json-tree details {
+    margin-left: 20px;
+}
+
+.json-tree summary {
+    cursor: pointer;
+    color: #555;
+    background-color: transparent;
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+.json-tree summary:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+
+.json-key {
+    color: #881391;
+    font-weight: bold;
+}
+
+.json-string {
+    color: #1a1aa6;
+}
+
+.json-number {
+    color: #1c6e00;
+}
+
+.json-boolean {
+    color: #0d22aa;
+}
+
+.json-null {
+    color: #777;
 } 
