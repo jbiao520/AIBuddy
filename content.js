@@ -462,7 +462,57 @@ function updatePopupStyles() {
 // 在创建弹窗前调用此函数
 updatePopupStyles();
 
-// 修改showResponse函数，确保新样式应用
+// 添加新的布局样式，确保输入框始终在popup内部
+const fixedLayoutStyles = `
+  /* 设置弹窗为flex布局 */
+  .ai-buddy-response-popup {
+    display: flex !important;
+    flex-direction: column !important;
+    max-height: 70vh !important;
+  }
+
+  /* 创建一个主内容区，包含滚动内容和输入框 */
+  .ai-buddy-main-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0; /* 确保flex子项可以正确收缩 */
+    position: relative;
+  }
+
+  /* 内容区域可滚动，但保留底部空间给输入框 */
+  .ai-buddy-response-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 12px;
+    padding-bottom: 16px; /* 确保内容和输入框之间有空间 */
+    max-height: none !important; /* 取消最大高度限制，由弹窗控制 */
+  }
+
+  /* 确保输入区域固定在底部 */
+  .ai-buddy-followup-container {
+    flex-shrink: 0;
+    margin-top: 16px;
+    border-top: 1px solid #eaeaea;
+    padding-top: 16px;
+    background-color: white;
+    z-index: 2;
+    position: sticky;
+    bottom: 0;
+  }
+
+  /* 操作栏也应该不参与滚动 */
+  .ai-buddy-action-bar {
+    flex-shrink: 0;
+  }
+`;
+
+// 将样式添加到文档
+const fixedLayoutStyleElement = document.createElement('style');
+fixedLayoutStyleElement.textContent = fixedLayoutStyles;
+document.head.appendChild(fixedLayoutStyleElement);
+
+// 修改 showResponse 函数，重构弹窗结构
 function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   // 确保样式更新
   updatePopupStyles();
@@ -475,7 +525,7 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
     popup = document.createElement('div');
     popup.className = 'ai-buddy-response-popup';
     
-    // 直接设置内联样式，确保宽度生效
+    // 设置宽度
     popup.style.width = '600px';
     popup.style.maxWidth = '90vw';
     
@@ -484,12 +534,17 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
     actionBar.className = 'ai-buddy-action-bar';
     popup.appendChild(actionBar);
     
+    // 创建主容器
+    const mainContainer = document.createElement('div');
+    mainContainer.className = 'ai-buddy-main-container';
+    popup.appendChild(mainContainer);
+    
     // 创建内容容器
     contentContainer = document.createElement('div');
     contentContainer.className = 'ai-buddy-response-content';
-    popup.appendChild(contentContainer);
+    mainContainer.appendChild(contentContainer);
     
-    // 添加二次提问输入框和按钮
+    // 创建输入区域
     const followupContainer = document.createElement('div');
     followupContainer.className = 'ai-buddy-followup-container';
     
@@ -504,7 +559,7 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
     followupButton.onclick = () => {
       const question = followupInput.value.trim();
       if (question) {
-        // 在内容容器中添加用户问题，而不是跟进容器上方
+        // 在内容容器中添加用户问题
         const userQuestionDiv = document.createElement('div');
         userQuestionDiv.className = 'ai-buddy-user-question';
         userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
@@ -514,8 +569,8 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
         const chatHistory = collectChatHistory();
         const fullPrompt = `${chatHistory}\n\n我的新问题是：${question}`;
         
-        // 调用LLM，指示追加到现有弹窗
-        followupInput.value = ''; // 清空输入框
+        // 清空输入框并发送请求
+        followupInput.value = '';
         sendToLLM(fullPrompt, x, y, true);
         
         // 自动滚动到问题底部
@@ -534,9 +589,9 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
     followupContainer.appendChild(followupInput);
     followupContainer.appendChild(followupButton);
     
-    popup.appendChild(followupContainer);
+    mainContainer.appendChild(followupContainer);
     
-    // 定位弹窗，考虑滚动位置
+    // 定位弹窗
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
@@ -563,8 +618,7 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   // 如果不是流式输出且有内容，直接渲染全部内容
   if (!isStreaming && response && contentContainer) {
     if (isHtml) {
-      // 如果是HTML内容，直接设置innerHTML
-      // 内容将由调用方（如showApiResponse）设置
+      // 如果是HTML内容，内容将由调用方设置
     } else {
       // 原来的markdown渲染
       contentContainer.innerHTML = renderMarkdown(response);
@@ -1481,120 +1535,113 @@ function formatArxivResponse(xmlString) {
     }
 }
 
-// 更新样式，使弹窗更宽并优化Markdown样式
-const improvedStyles = `
-    .ai-buddy-response-popup {
-        position: absolute;
-        width: 600px;  /* 增加宽度，原来是480px */
-        max-width: 90vw; /* 保持响应式设计 */
-        max-height: 70vh;
-        background-color: white;
-        border-radius: 12px;
-        padding: 24px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-        z-index: 10001;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        font-size: 15px;
-        line-height: 1.6;
-        color: #333;
-    }
-
-    .ai-buddy-response-content {
-        position: relative;
-        max-height: calc(70vh - 80px);
-        overflow-y: auto;
-        padding-right: 12px;
+// 修改 showApiResponse 函数也使用新结构
+function showApiResponse(data, x, y) {
+    // 移除所有菜单
+    removeAllMenus();
+    
+    // 使用HTML方式显示响应，这样可以包含交互式JSON渲染
+    const responseHtml = formatJsonResponse(data);
+    
+    // 显示响应，传入false表示不是流式输出，true表示是HTML内容
+    const contentContainer = showResponse("", x, y, false, true);
+    
+    // 在内容容器中设置格式化后的JSON
+    if (contentContainer) {
+        // 创建一个包含API响应的div
+        const apiResponseDiv = document.createElement('div');
+        apiResponseDiv.className = 'ai-buddy-api-response';
+        apiResponseDiv.innerHTML = responseHtml;
+        contentContainer.appendChild(apiResponseDiv);
+        
+        // 保存原始数据供后续查询使用
+        contentContainer.dataset.originalJson = JSON.stringify(data);
+        
+        // 绑定点击事件，让JSON树中的details元素可以折叠/展开
+        const detailsElements = contentContainer.querySelectorAll('details');
+        detailsElements.forEach(details => {
+            // 已经有原生的折叠/展开功能，只需确保summary可点击
+            const summary = details.querySelector('summary');
+            if (summary) {
+                summary.style.cursor = 'pointer';
+            }
+        });
+        
+        // 添加复制按钮
+        const actionBar = contentContainer.parentNode.parentNode.querySelector('.ai-buddy-action-bar');
+        if (actionBar && !actionBar.querySelector('.ai-buddy-copy-button')) {
+            createCopyButton(actionBar, contentContainer);
+        }
+        
+        // 替换跟进问题的处理
+        const popup = contentContainer.closest('.ai-buddy-response-popup');
+        if (popup) {
+            const followupContainer = popup.querySelector('.ai-buddy-followup-container');
+            const followupInput = followupContainer?.querySelector('.ai-buddy-followup-input');
+            const followupButton = followupContainer?.querySelector('.ai-buddy-followup-button');
+            
+            if (followupInput && followupButton) {
+                // 修改提示文本
+                followupInput.placeholder = '向LLM询问关于这个API响应的问题...';
+                
+                // 保存原来的处理器以备后用
+                const originalClick = followupButton.onclick;
+                
+                // 替换点击处理器
+                followupButton.onclick = () => {
+                    const question = followupInput.value.trim();
+                    if (question) {
+                        // 在内容容器中添加用户问题
+                        const userQuestionDiv = document.createElement('div');
+                        userQuestionDiv.className = 'ai-buddy-user-question';
+                        userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
+                        contentContainer.appendChild(userQuestionDiv);
+                        
+                        // 准备API数据
+                        let apiData = '';
+                        try {
+                            if (contentContainer.dataset.originalJson) {
+                                apiData = JSON.stringify(JSON.parse(contentContainer.dataset.originalJson), null, 2);
+                            } else {
+                                const jsonContent = contentContainer.querySelector('.json-tree');
+                                if (jsonContent) {
+                                    apiData = jsonContent.textContent;
+                                } else {
+                                    apiData = apiResponseDiv.textContent;
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error parsing API data:', e);
+                            apiData = apiResponseDiv.textContent;
+                        }
+                        
+                        // 构建提示
+                        const prompt = `以下是一个API返回的JSON数据：\n\n${apiData}\n\n用户问题是：${question}\n\n请分析这些数据并回答用户问题。`;
+                        
+                        // 清空输入框
+                        followupInput.value = '';
+                        
+                        // 调用LLM，追加到现有弹窗
+                        sendToLLM(prompt, x, y, true);
+                        
+                        // 自动滚动到底部
+                        contentContainer.scrollTop = contentContainer.scrollHeight;
+                    }
+                };
+                
+                // 更新回车键处理
+                followupInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        followupButton.click();
+                    }
+                });
+            }
+        }
     }
     
-    .ai-buddy-output-text {
-        padding-bottom: 24px; /* 为光标留出空间 */
-    }
-    
-    .ai-buddy-cursor-container {
-        margin-top: 3px;
-    }
-    
-    .ai-buddy-cursor {
-        display: inline-block;
-        width: 0.6em;
-        height: 1.2em;
-        background-color: #333;
-        animation: blink 1s step-end infinite;
-        vertical-align: text-bottom;
-    }
-    
-    @keyframes blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0; }
-    }
-`;
-
-// 还可以添加额外的CSS来优化段落间距
-const additionalCSS = `
-    .ai-buddy-response-content p {
-        margin-top: 0;
-        margin-bottom: 10px;
-    }
-    
-    .ai-buddy-response-content ul,
-    .ai-buddy-response-content ol {
-        margin-top: 4px;
-        margin-bottom: 10px;
-    }
-    
-    .ai-buddy-response-content h1,
-    .ai-buddy-response-content h2,
-    .ai-buddy-response-content h3 {
-        margin-top: 16px;
-        margin-bottom: 8px;
-    }
-    
-    .ai-buddy-response-content h1:first-child,
-    .ai-buddy-response-content h2:first-child,
-    .ai-buddy-response-content h3:first-child {
-        margin-top: 0;
-    }
-    
-    .ai-buddy-response-content blockquote {
-        margin: 10px 0;
-    }
-`;
-
-// 将这段 CSS 添加到您现有的样式中
-
-// 添加全局文档点击事件，清理所有UI元素
-document.addEventListener('click', function(event) {
-    if (!event.target.closest('.ai-buddy-floating-button') && 
-        !event.target.closest('.ai-buddy-prompt-menu') && 
-        !event.target.closest('.ai-buddy-response-popup') &&
-        !event.target.closest('.ai-buddy-loader')) {
-        removeAllPopups();
-    }
-});
-
-// 添加ESC键监听，按ESC关闭所有弹窗
-document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') {
-        removeAllPopups();
-    }
-});
-
-// 添加加载指示器样式
-const loaderStyles = `
-    .ai-buddy-loader {
-        position: absolute;
-        background-color: white;
-        border-radius: 8px;
-        padding: 12px 20px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        z-index: 10001;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 14px;
-        color: #333;
-    }
-`;
-
-// 将加载指示器样式添加到您现有的样式中 
+    console.log("API响应已显示", typeof data === 'object' ? '(JSON)' : '(Text)');
+}
 
 // 添加一个专门的函数来移除所有菜单
 function removeAllMenus() {
@@ -1758,112 +1805,6 @@ const stopButtonStyles = `
 const stopButtonStyleElement = document.createElement('style');
 stopButtonStyleElement.textContent = stopButtonStyles;
 document.head.appendChild(stopButtonStyleElement);
-
-// 修改显示API响应的函数，确保跟进提问能正确发送到LLM
-function showApiResponse(data, x, y) {
-    // 移除所有菜单
-    removeAllMenus();
-    
-    // 使用HTML方式显示响应，这样可以包含交互式JSON渲染
-    const responseHtml = formatJsonResponse(data);
-    
-    // 显示响应，传入false表示不是流式输出，true表示是HTML内容
-    const contentContainer = showResponse("", x, y, false, true);
-    
-    // 在内容容器中设置格式化后的JSON
-    if (contentContainer) {
-        // 创建一个包含API响应的div
-        const apiResponseDiv = document.createElement('div');
-        apiResponseDiv.className = 'ai-buddy-api-response';
-        apiResponseDiv.innerHTML = responseHtml;
-        contentContainer.appendChild(apiResponseDiv);
-        
-        // 保存原始数据供后续查询使用
-        contentContainer.dataset.originalJson = JSON.stringify(data);
-        
-        // 绑定点击事件，让JSON树中的details元素可以折叠/展开
-        const detailsElements = contentContainer.querySelectorAll('details');
-        detailsElements.forEach(details => {
-            // 已经有原生的折叠/展开功能，只需确保summary可点击
-            const summary = details.querySelector('summary');
-            if (summary) {
-                summary.style.cursor = 'pointer';
-            }
-        });
-        
-        // 添加复制按钮
-        const actionBar = contentContainer.parentNode.querySelector('.ai-buddy-action-bar');
-        if (actionBar && !actionBar.querySelector('.ai-buddy-copy-button')) {
-            createCopyButton(actionBar, contentContainer);
-        }
-        
-        // 获取跟进输入框和提交按钮
-        const followupContainer = contentContainer.parentNode.querySelector('.ai-buddy-followup-container');
-        if (followupContainer) {
-            const followupInput = followupContainer.querySelector('.ai-buddy-followup-input');
-            const followupButton = followupContainer.querySelector('.ai-buddy-followup-button');
-            
-            if (followupInput && followupButton) {
-                // 修改提示文本
-                followupInput.placeholder = '向LLM询问关于这个API响应的问题...';
-                
-                // 替换点击处理器
-                followupButton.onclick = () => {
-                    const question = followupInput.value.trim();
-                    if (question) {
-                        // 在内容容器中添加用户问题，而不是在跟进容器上方
-                        const userQuestionDiv = document.createElement('div');
-                        userQuestionDiv.className = 'ai-buddy-user-question';
-                        userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
-                        contentContainer.appendChild(userQuestionDiv);
-                        
-                        // 准备向LLM发送的提示
-                        let apiData = '';
-                        try {
-                            // 尝试获取保存的原始JSON
-                            if (contentContainer.dataset.originalJson) {
-                                apiData = JSON.stringify(JSON.parse(contentContainer.dataset.originalJson), null, 2);
-                            } else {
-                                // 如果没有保存的原始数据，尝试从显示内容中提取
-                                const jsonContent = contentContainer.querySelector('.json-tree');
-                                if (jsonContent) {
-                                    apiData = jsonContent.textContent;
-                                } else {
-                                    apiData = apiResponseDiv.textContent;
-                                }
-                            }
-                        } catch (e) {
-                            console.error('Error parsing API data:', e);
-                            apiData = apiResponseDiv.textContent;
-                        }
-                        
-                        // 构建提示
-                        const prompt = `以下是一个API返回的JSON数据：\n\n${apiData}\n\n用户问题是：${question}\n\n请分析这些数据并回答用户问题。`;
-                        
-                        // 清空输入框
-                        followupInput.value = '';
-                        
-                        // 调用LLM，追加到现有弹窗
-                        sendToLLM(prompt, x, y, true);
-                        
-                        // 自动滚动到问题底部
-                        contentContainer.scrollTop = contentContainer.scrollHeight;
-                    }
-                };
-                
-                // 更新回车键处理
-                followupInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        followupButton.click();
-                    }
-                });
-            }
-        }
-    }
-    
-    console.log("API响应已显示", typeof data === 'object' ? '(JSON)' : '(Text)');
-}
 
 // 添加跟进提问输入框的样式
 const followupStyles = `
