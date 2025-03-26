@@ -154,12 +154,6 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
         existingPopup = document.querySelector('.ai-buddy-response-popup');
         if (existingPopup) {
             contentContainer = existingPopup.querySelector('.ai-buddy-response-content');
-            
-            // 创建对话分隔线
-            const separator = document.createElement('div');
-            separator.className = 'ai-buddy-conversation-separator';
-            separator.innerHTML = '<hr><div class="separator-text">新的回答</div>';
-            contentContainer.appendChild(separator);
         }
     }
     
@@ -473,144 +467,142 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   // 确保样式更新
   updatePopupStyles();
   
-  // 移除现有的响应弹窗
-  const existingPopups = document.querySelectorAll('.ai-buddy-response-popup');
-  existingPopups.forEach(popup => {
-    if (popup.parentNode) {
-      popup.parentNode.removeChild(popup);
-    }
-  });
+  let popup = document.querySelector('.ai-buddy-response-popup');
+  let contentContainer = null;
   
-  const popup = document.createElement('div');
-  popup.className = 'ai-buddy-response-popup';
-  
-  // 直接设置内联样式，确保宽度生效
-  popup.style.width = '600px';
-  popup.style.maxWidth = '90vw';
-  
-  // 创建顶部操作栏
-  const actionBar = document.createElement('div');
-  actionBar.className = 'ai-buddy-action-bar';
-  
-  // 添加操作按钮
-  // ... 您现有的操作按钮代码 ...
-  
-  popup.appendChild(actionBar);
-  
-  // 创建内容容器
-  const contentContainer = document.createElement('div');
-  contentContainer.className = 'ai-buddy-response-content';
-  
-  // 如果不是流式输出，直接渲染全部内容
-  if (!isStreaming) {
-      if (isHtml) {
-          // 如果是HTML内容，直接设置innerHTML
-          contentContainer.innerHTML = response;
-      } else {
-          // 原来的markdown渲染
-          contentContainer.innerHTML = renderMarkdown(response);
+  // 如果没有现有弹窗，创建一个新的
+  if (!popup) {
+    popup = document.createElement('div');
+    popup.className = 'ai-buddy-response-popup';
+    
+    // 直接设置内联样式，确保宽度生效
+    popup.style.width = '600px';
+    popup.style.maxWidth = '90vw';
+    
+    // 创建顶部操作栏
+    const actionBar = document.createElement('div');
+    actionBar.className = 'ai-buddy-action-bar';
+    popup.appendChild(actionBar);
+    
+    // 创建内容容器
+    contentContainer = document.createElement('div');
+    contentContainer.className = 'ai-buddy-response-content';
+    popup.appendChild(contentContainer);
+    
+    // 添加二次提问输入框和按钮
+    const followupContainer = document.createElement('div');
+    followupContainer.className = 'ai-buddy-followup-container';
+    
+    const followupInput = document.createElement('textarea');
+    followupInput.className = 'ai-buddy-followup-input';
+    followupInput.placeholder = '可以在这里输入跟进问题...';
+    followupInput.rows = 2;
+    
+    const followupButton = document.createElement('button');
+    followupButton.className = 'ai-buddy-followup-button';
+    followupButton.textContent = '提问';
+    followupButton.onclick = () => {
+      const question = followupInput.value.trim();
+      if (question) {
+        // 在内容容器中添加用户问题，而不是跟进容器上方
+        const userQuestionDiv = document.createElement('div');
+        userQuestionDiv.className = 'ai-buddy-user-question';
+        userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
+        contentContainer.appendChild(userQuestionDiv);
+        
+        // 构建完整提示
+        const chatHistory = collectChatHistory();
+        const fullPrompt = `${chatHistory}\n\n我的新问题是：${question}`;
+        
+        // 调用LLM，指示追加到现有弹窗
+        followupInput.value = ''; // 清空输入框
+        sendToLLM(fullPrompt, x, y, true);
+        
+        // 自动滚动到问题底部
+        contentContainer.scrollTop = contentContainer.scrollHeight;
       }
-  }
-  // 如果是流式输出，内容会在流处理过程中逐步添加
-  
-  popup.appendChild(contentContainer);
-
-  // 添加二次提问输入框和按钮
-  const followupContainer = document.createElement('div');
-  followupContainer.className = 'ai-buddy-followup-container';
-  
-  const followupInput = document.createElement('textarea');
-  followupInput.className = 'ai-buddy-followup-input';
-  followupInput.placeholder = '可以在这里输入跟进问题...';
-  followupInput.rows = 2;
-  
-  const followupButton = document.createElement('button');
-  followupButton.className = 'ai-buddy-followup-button';
-  followupButton.textContent = '提问';
-  followupButton.onclick = () => {
-    const question = followupInput.value.trim();
-    if (question) {
-      // 在跟进容器上方插入用户问题
-      const userQuestionDiv = document.createElement('div');
-      userQuestionDiv.className = 'ai-buddy-user-question';
-      userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
-      followupContainer.parentNode.insertBefore(userQuestionDiv, followupContainer);
-      
-      // 构建完整提示，将部分历史包含在内
-      // 注意：如果历史太长，可能需要截断
-      const chatHistory = collectChatHistory();
-      const fullPrompt = `${chatHistory}\n\n我的新问题是：${question}`;
-      
-      // 调用LLM，指示追加到现有弹窗
-      followupInput.value = ''; // 清空输入框
-      sendToLLM(fullPrompt, x, y, true);
-    }
-  };
-  
-  // 添加按回车键发送功能
-  followupInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      followupButton.click();
-    }
-  });
-  
-  followupContainer.appendChild(followupInput);
-  followupContainer.appendChild(followupButton);
-  
-  popup.appendChild(followupContainer);
-  
-  // 定位弹窗，考虑滚动位置
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  
-  popup.style.left = `${Math.min(x, window.scrollX + viewportWidth - 500)}px`;
-  popup.style.top = `${Math.min(y, window.scrollY + viewportHeight - 400)}px`;
-  
-  // 添加关闭按钮
-  const closeButton = document.createElement('button');
-  closeButton.className = 'ai-buddy-close-button';
-  closeButton.textContent = '×';
-  closeButton.onclick = () => {
+    };
+    
+    // 添加按回车键发送功能
+    followupInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        followupButton.click();
+      }
+    });
+    
+    followupContainer.appendChild(followupInput);
+    followupContainer.appendChild(followupButton);
+    
+    popup.appendChild(followupContainer);
+    
+    // 定位弹窗，考虑滚动位置
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    popup.style.left = `${Math.min(x, window.scrollX + viewportWidth - 500)}px`;
+    popup.style.top = `${Math.min(y, window.scrollY + viewportHeight - 400)}px`;
+    
+    // 添加关闭按钮
+    const closeButton = document.createElement('button');
+    closeButton.className = 'ai-buddy-close-button';
+    closeButton.textContent = '×';
+    closeButton.onclick = () => {
       if (popup.parentNode) {
-          popup.parentNode.removeChild(popup);
+        popup.parentNode.removeChild(popup);
       }
-  };
-  popup.appendChild(closeButton);
+    };
+    popup.appendChild(closeButton);
+    
+    document.body.appendChild(popup);
+  } else {
+    // 使用现有弹窗
+    contentContainer = popup.querySelector('.ai-buddy-response-content');
+  }
   
-  document.body.appendChild(popup);
+  // 如果不是流式输出且有内容，直接渲染全部内容
+  if (!isStreaming && response && contentContainer) {
+    if (isHtml) {
+      // 如果是HTML内容，直接设置innerHTML
+      // 内容将由调用方（如showApiResponse）设置
+    } else {
+      // 原来的markdown渲染
+      contentContainer.innerHTML = renderMarkdown(response);
+    }
+  }
   
   return contentContainer; // 返回内容容器，方便流式更新
 }
 
-// 收集对话历史
+// 修改收集对话历史函数，以适应新的对话流
 function collectChatHistory() {
   const contentContainer = document.querySelector('.ai-buddy-response-content');
   if (!contentContainer) return '';
   
   let history = '';
   
-  // 获取所有回答和问题
-  const answers = contentContainer.querySelectorAll('.ai-buddy-output-text');
-  const questions = contentContainer.querySelectorAll('.ai-buddy-user-question');
+  // 按顺序获取所有元素
+  const children = Array.from(contentContainer.children);
+  let currentQuestion = null;
   
-  // 如果内容太多，只获取最近的几轮对话
-  const maxHistory = 2; // 最多保留最近的几轮对话
-  const startIdx = Math.max(0, answers.length - maxHistory);
+  // 最多保留最近的几轮对话
+  const maxHistory = 3; // 最大保留历史轮数
+  const relevantItems = children.slice(-maxHistory * 2); // 问题和回答成对，所以是maxHistory的两倍
   
-  // 拼接历史对话
-  for (let i = startIdx; i < answers.length; i++) {
-    const questionIndex = i - 1;
-    if (questionIndex >= 0 && questions[questionIndex]) {
-      history += `用户问题: ${questions[questionIndex].querySelector('.question-content').textContent}\n\n`;
+  for (const element of relevantItems) {
+    if (element.classList.contains('ai-buddy-user-question')) {
+      // 保存问题
+      currentQuestion = element.querySelector('.question-content')?.textContent || '';
+      if (currentQuestion) {
+        history += `用户问题: ${currentQuestion}\n\n`;
+      }
+    } else if (element.classList.contains('ai-buddy-output-text')) {
+      // 添加回答
+      history += `AI回答: ${element.textContent}\n\n`;
+    } else if (element.classList.contains('ai-buddy-api-response')) {
+      // API响应简化处理
+      history += `API响应: [JSON数据]\n\n`;
     }
-    history += `AI回答: ${answers[i].textContent}\n\n`;
-  }
-  
-  // 如果有最新的问题但还没有回答
-  if (questions.length > answers.length - 1) {
-    const lastQuestion = questions[questions.length - 1];
-    history += `用户问题: ${lastQuestion.querySelector('.question-content').textContent}\n\n`;
   }
   
   return history;
@@ -1815,18 +1807,15 @@ function showApiResponse(data, x, y) {
                 // 修改提示文本
                 followupInput.placeholder = '向LLM询问关于这个API响应的问题...';
                 
-                // 保存原有的点击处理器
-                const originalClickHandler = followupButton.onclick;
-                
                 // 替换点击处理器
                 followupButton.onclick = () => {
                     const question = followupInput.value.trim();
                     if (question) {
-                        // 在跟进容器上方插入用户问题
+                        // 在内容容器中添加用户问题，而不是在跟进容器上方
                         const userQuestionDiv = document.createElement('div');
                         userQuestionDiv.className = 'ai-buddy-user-question';
                         userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
-                        followupContainer.parentNode.insertBefore(userQuestionDiv, followupContainer);
+                        contentContainer.appendChild(userQuestionDiv);
                         
                         // 准备向LLM发送的提示
                         let apiData = '';
@@ -1856,6 +1845,9 @@ function showApiResponse(data, x, y) {
                         
                         // 调用LLM，追加到现有弹窗
                         sendToLLM(prompt, x, y, true);
+                        
+                        // 自动滚动到问题底部
+                        contentContainer.scrollTop = contentContainer.scrollHeight;
                     }
                 };
                 
