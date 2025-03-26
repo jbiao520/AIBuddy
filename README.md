@@ -44,4 +44,53 @@ The extension consists of the following files:
 
 ## Contributing
 
-Feel free to submit issues and enhancement requests! 
+Feel free to submit issues and enhancement requests!
+
+# AI Buddy 配置说明
+
+## 自定义提示选项
+
+你可以通过编辑 `prompt-config.js` 文件来自定义提示选项。
+
+### 配置格式说明
+
+```javascript
+const promptOptions = [
+  {
+    name: "菜单组名称",
+    subMenu: [
+      { 
+        name: "选项名称", 
+        prompt: "发送到LLM的提示前缀"
+      },
+      // ... 更多选项
+    ]
+  },
+  // API调用示例
+  {
+    name: "API调用",
+    subMenu: [
+      {
+        name: "GET请求示例",
+        isApi: true,            // 标记为API调用
+        apiUrl: "http://your-api-url",
+        method: "GET",
+        params: {               // 请求参数
+          param1: "value1"  
+        },
+        paramName: "paramName"  // 选中文本将作为此参数
+      }
+    ]
+  }
+];
+```
+
+### 支持的选项类型
+
+1. **LLM提示**：直接发送到语言模型的提示
+2. **API调用**：`isApi: true`，支持GET和POST请求
+3. **自定义提示**：`isCustom: true`，允许用户输入自定义提示
+
+### 更改后生效
+
+修改配置文件后，请刷新或重新加载扩展以使更改生效。 

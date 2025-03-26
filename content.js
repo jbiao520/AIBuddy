@@ -15,61 +15,48 @@ function loadStyles() {
 // 初始化时加载样式
 loadStyles();
 
-// Define different prompt options
-const promptOptions = [
-  {
-    name: "LLM",
-    subMenu: [
-      { 
-        name: "解释内容", 
-        prompt: "请解释以下内容："
-      },
-      { 
-        name: "翻译内容", 
-        prompt: "请翻译以下内容："
-      },
-      {
-        name: "自定义提示...",
-        isCustom: true
-      }
-    ]
-  },
-  {
-    name: "API 调用",
-    subMenu: [
-      {
-        name: "Get查询",
-        isApi: true,
-        apiUrl: "http://localhost:7070/api/service1/users",
-        method: "GET",
-        params: {
-            name: "query"  
+// 导入提示选项配置
+let promptOptions = [];
+
+// 动态加载提示配置
+function loadPromptConfig() {
+  // 使用 Chrome 扩展 API 获取配置文件 URL
+  const configUrl = chrome.runtime.getURL('prompt-config.js');
+  
+  // 动态导入配置模块
+  import(configUrl)
+    .then(module => {
+      promptOptions = module.default;
+      console.log("AI Buddy 提示配置已加载");
+    })
+    .catch(error => {
+      console.error("加载提示配置失败:", error);
+      // 使用默认配置
+      promptOptions = getDefaultConfig();
+    });
+}
+
+// 默认配置函数，作为备用
+function getDefaultConfig() {
+  return [
+    {
+      name: "LLM",
+      subMenu: [
+        { 
+          name: "解释内容", 
+          prompt: "请解释以下内容："
         },
-        paramName: "name"
-      },
-      {
-        name: "pay查询",
-        isApi: true,
-        apiUrl: "http://localhost:7070/api/service2/payments",
-        method: "POST",
-        params: {
-          "flow": "payment"
-        },
-        paramName: "id"  // 选中的文字将作为id参数
-      },
-      {
-        name: "order查询",
-        isApi: true,
-        apiUrl: "http://localhost:7070/api/service1/orders",
-        method: "POST",
-        params: {
-          "flow": "order"
-        },
-        paramName: "id"  // 选中的文字将作为id参数
-      }
-    ]
-  }
-];
+        { 
+          name: "翻译内容", 
+          prompt: "请翻译以下内容："
+        }
+      ]
+    }
+  ];
+}
+
+// 初始化时加载提示配置
+loadPromptConfig();
 
 // Text selection event
 document.addEventListener('mouseup', (event) => {
