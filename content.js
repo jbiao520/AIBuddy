@@ -129,6 +129,10 @@ function sendToLLM(prompt, x, y) {
     // 关闭所有菜单
     removeAllMenus();
     
+    // 创建 AbortController 实例
+    const controller = new AbortController();
+    const signal = controller.signal;
+    
     // 立即显示一个空的响应弹窗
     showResponse("", x, y, true);
     
@@ -155,23 +159,45 @@ function sendToLLM(prompt, x, y) {
     cursor.textContent = '▋';
     cursorContainer.appendChild(cursor);
     
+    // 创建操作栏并添加按钮
+    const actionBar = document.querySelector('.ai-buddy-action-bar');
+    
+    // 添加终止按钮
+    const stopButton = document.createElement('button');
+    stopButton.className = 'ai-buddy-stop-button';
+    stopButton.textContent = '终止输出';
+    stopButton.onclick = () => {
+        controller.abort();
+        stopButton.textContent = '已终止';
+        stopButton.disabled = true;
+        stopButton.classList.add('stopped');
+        if (cursorContainer.parentNode) {
+            cursorContainer.parentNode.removeChild(cursorContainer);
+        }
+        
+        // 流结束时显示复制按钮
+        if (!actionBar.querySelector('.ai-buddy-copy-button')) {
+            createCopyButton(actionBar, outputContainer);
+        }
+    };
+    
+    if (actionBar) {
+        actionBar.appendChild(stopButton);
+    }
+    
     // 变量跟踪是否用户手动滚动了
     let userHasScrolled = false;
     let lastScrollTop = 0;
     
     // 监听滚动事件
     contentContainer.addEventListener('scroll', () => {
-        // 检测是否用户向上滚动
         if (contentContainer.scrollTop < lastScrollTop) {
             userHasScrolled = true;
         }
-        
-        // 检测是否滚动到底部
         const isAtBottom = contentContainer.scrollHeight - contentContainer.scrollTop <= contentContainer.clientHeight + 10;
         if (isAtBottom) {
             userHasScrolled = false;
         }
-        
         lastScrollTop = contentContainer.scrollTop;
     });
     
@@ -187,7 +213,8 @@ function sendToLLM(prompt, x, y) {
             model: "gemma3:12b",
             prompt: prompt,
             stream: true
-        })
+        }),
+        signal // 添加 signal 到 fetch 请求
     })
     .then(response => {
         if (!response.ok) {
@@ -202,10 +229,19 @@ function sendToLLM(prompt, x, y) {
         function processStream() {
             return reader.read().then(({ done, value }) => {
                 if (done) {
-                    // 流结束，移除光标
+                    // 流结束，移除光标和禁用终止按钮
                     if (cursorContainer.parentNode) {
                         cursorContainer.parentNode.removeChild(cursorContainer);
                     }
+                    stopButton.textContent = '已完成';
+                    stopButton.disabled = true;
+                    stopButton.classList.add('completed');
+                    
+                    // 添加复制按钮
+                    if (!actionBar.querySelector('.ai-buddy-copy-button')) {
+                        createCopyButton(actionBar, outputContainer);
+                    }
+                    
                     return;
                 }
                 
@@ -213,19 +249,14 @@ function sendToLLM(prompt, x, y) {
                 const chunk = decoder.decode(value, { stream: true });
                 
                 try {
-                    // 尝试解析JSON响应
                     const lines = chunk.split('\n').filter(line => line.trim());
                     
                     for (const line of lines) {
                         const data = JSON.parse(line);
                         if (data.response) {
-                            // 添加新文本到响应
                             fullResponse += data.response;
-                            
-                            // 渲染Markdown并更新显示
                             outputContainer.innerHTML = renderMarkdown(fullResponse);
                             
-                            // 如果用户没有手动滚动，则自动滚动到底部
                             if (!userHasScrolled) {
                                 contentContainer.scrollTop = contentContainer.scrollHeight;
                             }
@@ -235,24 +266,96 @@ function sendToLLM(prompt, x, y) {
                     console.error("解析流数据错误:", e, "原始数据:", chunk);
                 }
                 
-                // 继续处理流
                 return processStream();
             });
         }
         
-        // 开始处理流
         return processStream();
     })
     .catch(error => {
-        console.error("LLM调用错误:", error);
-        outputContainer.innerHTML = renderMarkdown("调用LLM时出错: " + error.message);
+        if (error.name === 'AbortError') {
+            console.log('Fetch aborted');
+            outputContainer.innerHTML += renderMarkdown("\n\n[输出已终止]");
+        } else {
+            console.error("LLM调用错误:", error);
+            outputContainer.innerHTML = renderMarkdown("调用LLM时出错: " + error.message);
+            stopButton.style.display = 'none';
+        }
         
         // 移除光标
         if (cursorContainer.parentNode) {
             cursorContainer.parentNode.removeChild(cursorContainer);
         }
+        
+        // 错误情况下也显示复制按钮
+        if (!actionBar.querySelector('.ai-buddy-copy-button') && outputContainer.textContent.trim()) {
+            createCopyButton(actionBar, outputContainer);
+        }
     });
 }
+
+// 创建复制按钮的函数
+function createCopyButton(actionBar, outputContainer) {
+    const copyButton = document.createElement('button');
+    copyButton.className = 'ai-buddy-copy-button';
+    copyButton.textContent = '复制内容';
+    copyButton.onclick = () => {
+        // 获取纯文本内容
+        const content = outputContainer.innerText || outputContainer.textContent;
+        
+        // 复制到剪贴板
+        navigator.clipboard.writeText(content)
+            .then(() => {
+                // 复制成功，暂时改变按钮文本
+                const originalText = copyButton.textContent;
+                copyButton.textContent = '已复制!';
+                copyButton.classList.add('copied');
+                
+                // 2秒后恢复原来的文本
+                setTimeout(() => {
+                    copyButton.textContent = originalText;
+                    copyButton.classList.remove('copied');
+                }, 2000);
+            })
+            .catch(err => {
+                console.error('复制失败:', err);
+                copyButton.textContent = '复制失败';
+                setTimeout(() => {
+                    copyButton.textContent = '复制内容';
+                }, 2000);
+            });
+    };
+    
+    actionBar.appendChild(copyButton);
+    return copyButton;
+}
+
+// 添加复制按钮样式
+const copyButtonStyles = `
+    .ai-buddy-copy-button {
+        background-color: #2b7de9;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .ai-buddy-copy-button:hover {
+        background-color: #1a68c7;
+    }
+    
+    .ai-buddy-copy-button.copied {
+        background-color: #28a745;
+    }
+`;
+
+// 将复制按钮样式添加到文档中
+const copyButtonStyleElement = document.createElement('style');
+copyButtonStyleElement.textContent = copyButtonStyles;
+document.head.appendChild(copyButtonStyleElement);
 
 // 确保弹窗宽度修改生效的方法
 function updatePopupStyles() {
@@ -1468,5 +1571,46 @@ const jsonStyleElement = document.createElement('style');
 jsonStyleElement.textContent = jsonDetailsStyles;
 document.head.appendChild(jsonStyleElement);
 
-// 将这段 CSS 添加到您现有的样式中
-// ... remaining existing code ... 
+// 添加终止按钮样式
+const stopButtonStyles = `
+    .ai-buddy-stop-button {
+        background-color: #ff4444;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        margin-left: auto;
+    }
+    
+    .ai-buddy-stop-button:hover {
+        background-color: #ff2222;
+    }
+    
+    .ai-buddy-stop-button:disabled {
+        cursor: default;
+        opacity: 0.6;
+    }
+    
+    .ai-buddy-stop-button.stopped {
+        background-color: #666;
+    }
+    
+    .ai-buddy-stop-button.completed {
+        background-color: #22aa22;
+    }
+    
+    .ai-buddy-action-bar {
+        display: flex;
+        align-items: center;
+        margin-bottom: 12px;
+        gap: 8px;
+    }
+`;
+
+// 将终止按钮样式添加到文档中
+const stopButtonStyleElement = document.createElement('style');
+stopButtonStyleElement.textContent = stopButtonStyles;
+document.head.appendChild(stopButtonStyleElement); 
