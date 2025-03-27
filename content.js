@@ -305,32 +305,24 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
     let existingPopup = null;
     let contentContainer = null;
     
-    // 使用屏幕中心坐标，而不是传入的x, y
+    // 使用屏幕中心坐标
     const centerX = window.innerWidth / 2 + window.scrollX;
     const centerY = window.innerHeight / 2 + window.scrollY;
-    
-    console.log("使用屏幕中心坐标:", centerX, centerY, "而不是:", x, y);
     
     // 检查是否需要在现有弹窗中追加内容
     if (appendToExisting) {
         existingPopup = document.querySelector('.ai-buddy-response-popup');
         if (existingPopup) {
             contentContainer = existingPopup.querySelector('.ai-buddy-response-content');
-            
-            // 确保现有弹窗居中
             centerElementOnScreen(existingPopup);
         }
     }
     
     // 如果没有现有的弹窗或内容容器，创建一个新的
     if (!existingPopup || !contentContainer) {
-        // 立即显示一个空的响应弹窗，使用屏幕中心坐标
         contentContainer = showResponse("", centerX, centerY, true);
-        
-        // 获取新创建的弹窗并确保居中
         existingPopup = document.querySelector('.ai-buddy-response-popup');
         if (existingPopup) {
-            // 确保弹窗居中
             centerElementOnScreen(existingPopup);
         }
     }
@@ -356,10 +348,24 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
     cursor.textContent = '▋';
     cursorContainer.appendChild(cursor);
     
-    // 创建操作栏并添加按钮
+    // 获取操作栏
     const actionBar = existingPopup.querySelector('.ai-buddy-action-bar');
     
-    // 添加终止按钮
+    // 清理操作栏，移除所有已完成/已取消的按钮
+    if (actionBar) {
+        const oldButtons = actionBar.querySelectorAll('.ai-buddy-stop-button.completed, .ai-buddy-stop-button.stopped');
+        oldButtons.forEach(btn => {
+            actionBar.removeChild(btn);
+        });
+        
+        // 移除之前的复制按钮，后面会根据需要重新添加
+        const oldCopyButtons = actionBar.querySelectorAll('.ai-buddy-copy-button');
+        oldCopyButtons.forEach(btn => {
+            actionBar.removeChild(btn);
+        });
+    }
+    
+    // 添加新的终止按钮
     const stopButton = document.createElement('button');
     stopButton.className = 'ai-buddy-stop-button';
     stopButton.textContent = '终止输出';
@@ -373,7 +379,7 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
         }
         
         // 流结束时显示复制按钮
-        if (!actionBar.querySelector('.ai-buddy-copy-button')) {
+        if (actionBar && !actionBar.querySelector('.ai-buddy-copy-button')) {
             createCopyButton(actionBar, outputContainer);
         }
         
@@ -382,16 +388,6 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
     };
     
     if (actionBar) {
-        // 清除之前的终止按钮
-        const oldStopButtons = actionBar.querySelectorAll('.ai-buddy-stop-button');
-        oldStopButtons.forEach(btn => {
-            if (!btn.disabled) {
-                btn.textContent = '已取消';
-                btn.disabled = true;
-                btn.classList.add('stopped');
-            }
-        });
-        
         actionBar.appendChild(stopButton);
     }
     
@@ -444,16 +440,18 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
         function processStream() {
             return reader.read().then(({ done, value }) => {
                 if (done) {
-                    // 流结束，移除光标和禁用终止按钮
+                    // 流结束，移除光标
                     if (cursorContainer.parentNode) {
                         cursorContainer.parentNode.removeChild(cursorContainer);
                     }
-                    stopButton.textContent = '已完成';
-                    stopButton.disabled = true;
-                    stopButton.classList.add('completed');
+                    
+                    // 移除终止按钮，避免累积
+                    if (actionBar && stopButton.parentNode === actionBar) {
+                        actionBar.removeChild(stopButton);
+                    }
                     
                     // 添加复制按钮
-                    if (!actionBar.querySelector('.ai-buddy-copy-button')) {
+                    if (actionBar && !actionBar.querySelector('.ai-buddy-copy-button')) {
                         createCopyButton(actionBar, contentContainer);
                     }
                     
@@ -508,7 +506,11 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
         } else {
             console.error("LLM调用错误:", error);
             outputContainer.innerHTML = renderMarkdown("调用LLM时出错: " + error.message);
-            stopButton.style.display = 'none';
+            
+            // 移除终止按钮
+            if (actionBar && stopButton.parentNode === actionBar) {
+                actionBar.removeChild(stopButton);
+            }
         }
         
         // 移除光标
@@ -517,7 +519,7 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
         }
         
         // 错误情况下也显示复制按钮
-        if (!actionBar.querySelector('.ai-buddy-copy-button') && outputContainer.textContent.trim()) {
+        if (actionBar && !actionBar.querySelector('.ai-buddy-copy-button') && outputContainer.textContent.trim()) {
             createCopyButton(actionBar, contentContainer);
         }
         
@@ -527,11 +529,6 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
         // 确保弹窗居中
         centerElementOnScreen(existingPopup);
     });
-    
-    // 立即重新居中弹窗，确保它显示在屏幕中央
-    if (existingPopup) {
-        centerElementOnScreen(existingPopup);
-    }
 }
 
 // 禁用跟进输入框
