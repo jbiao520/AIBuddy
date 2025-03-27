@@ -1,6 +1,7 @@
 let floatingButton = null;
 let promptMenu = null;
 let selectedTextContent = "";
+let domainPrompts = {}; // 保存域名与系统提示的映射关系
 
 // 动态加载CSS样式
 function loadStyles() {
@@ -26,13 +27,15 @@ function loadPromptConfig() {
   // 动态导入配置模块
   import(configUrl)
     .then(module => {
-      promptOptions = module.default;
+      promptOptions = module.promptOptions;
+      domainPrompts = module.domainPrompts;
       console.log("AI Buddy 提示配置已加载");
     })
     .catch(error => {
       console.error("加载提示配置失败:", error);
       // 使用默认配置
       promptOptions = getDefaultConfig();
+      domainPrompts = { "default": "请分析以下内容：" };
     });
 }
 
@@ -1304,26 +1307,23 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
             }
             
             if (option.isCustom) {
-                showCustomPromptInput(
-                    parseInt(floatingButton.dataset.posX),
-                    parseInt(floatingButton.dataset.posY)
-                );
+                // 使用屏幕中心坐标
+                const centerX = window.innerWidth / 2 + window.scrollX;
+                const centerY = window.innerHeight / 2 + window.scrollY;
+                showCustomPromptInput(centerX, centerY);
                 return;
             }
             
-            // 获取按钮位置
-            let x = 0, y = 0;
-            if (floatingButton) {
-                x = parseInt(floatingButton.dataset.posX);
-                y = parseInt(floatingButton.dataset.posY);
-            }
+            // 使用屏幕中心坐标
+            const centerX = window.innerWidth / 2 + window.scrollX;
+            const centerY = window.innerHeight / 2 + window.scrollY;
             
             // 处理 API 调用
             if (option.isApi) {
                 // 显示加载指示器
                 menuItem.innerHTML = '⏳ ' + option.name;
                 menuItem.style.pointerEvents = 'none';
-                callExternalApi(option, selectedTextContent, x, y);
+                callExternalApi(option, selectedTextContent, centerX, centerY);
                 return;
             }
             
@@ -1331,9 +1331,22 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
             menuItem.innerHTML = '⏳ ' + option.name;
             menuItem.style.pointerEvents = 'none';
             
+            // 检查是否需要使用网站特定的系统提示
+            let fullPrompt = option.prompt + " " + selectedTextContent;
+            
+            if (option.systemPrompt === true) {
+                // 获取当前域名
+                const currentDomain = getCurrentDomain();
+                // 获取该域名对应的系统提示
+                const systemPrompt = getSystemPromptForDomain(currentDomain);
+                
+                // 组合系统提示、菜单提示和选中文本
+                fullPrompt = `${systemPrompt}\n\n${option.prompt} ${selectedTextContent}`;
+                console.log(`使用网站特定提示: ${currentDomain} -> ${systemPrompt.substring(0, 50)}...`);
+            }
+            
             // 发送请求
-            const fullPrompt = option.prompt + " " + selectedTextContent;
-            sendToLLM(fullPrompt, x, y);
+            sendToLLM(fullPrompt, centerX, centerY);
         });
         
         menu.appendChild(menuItem);
@@ -2658,3 +2671,35 @@ function addCenteredPopupStyles() {
 
 // 在初始化时添加样式
 addCenteredPopupStyles();
+
+// 添加获取当前域名的函数
+function getCurrentDomain() {
+  const domain = window.location.hostname;
+  return domain;
+}
+
+// 根据当前域名获取系统提示
+function getSystemPromptForDomain(domain) {
+  if (!domainPrompts) return "";
+  
+  // 移除可能的 www. 前缀
+  const cleanDomain = domain.replace(/^www\./, '');
+  
+  // 尝试精确匹配
+  if (domainPrompts[cleanDomain]) {
+    console.log(`找到网站 ${cleanDomain} 的特定提示`);
+    return domainPrompts[cleanDomain];
+  }
+  
+  // 尝试部分匹配（例如 example.github.io 应该匹配 github.io）
+  for (const key in domainPrompts) {
+    if (cleanDomain.endsWith(key) || cleanDomain.includes(key)) {
+      console.log(`找到部分匹配网站 ${key} 的提示`);
+      return domainPrompts[key];
+    }
+  }
+  
+  // 找不到特定配置时使用默认提示
+  console.log(`未找到特定提示，使用默认提示`);
+  return domainPrompts["default"] || "";
+}
