@@ -6,12 +6,16 @@ const promptOptions = [
     name: "LLM",
     subMenu: [
       { 
-        name: "解释内容", 
-        prompt: "请解释以下内容："
+        name: "Summarize",
+        prompt: "You are a paper assistant, please help to summarize it and help user to get the point："
+      },
+      {
+        name: "Summarize(CN)",
+        prompt: "你是一个论文助手，请用中文帮用户总结下这段内容，提炼精华："
       },
       { 
         name: "翻译内容", 
-        prompt: "请翻译以下内容："
+        prompt: "请用中文翻译以下内容，翻译的长度和原文匹配，不要加入其他无关内容："
       },
       {
         name: "自定义提示...",

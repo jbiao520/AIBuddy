@@ -58,6 +58,175 @@ function getDefaultConfig() {
 // 初始化时加载提示配置
 loadPromptConfig();
 
+// 添加复制事件监听，支持键盘复制后触发
+document.addEventListener('copy', (event) => {
+  setTimeout(() => {
+    const selectedText = window.getSelection().toString().trim();
+    if (selectedText.length > 0) {
+      // 移除现有浮动按钮
+      if (floatingButton && floatingButton.parentNode) {
+        document.body.removeChild(floatingButton);
+        floatingButton = null;
+      }
+      
+      // 保存选中文本
+      selectedTextContent = selectedText;
+      
+      // 计算最佳按钮位置
+      const position = calculateButtonPosition(window.getSelection());
+      
+      // 创建浮动按钮
+      floatingButton = createFloatingButtonWithTooltip(position.x, position.y, selectedText);
+    }
+  }, 100);
+});
+
+// 添加键盘事件监听，捕获复制快捷键
+document.addEventListener('keydown', (event) => {
+  // 检测Ctrl+C 或 Command+C (Mac)
+  if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+    // 在下一个事件循环中处理，确保复制命令已执行
+    setTimeout(() => {
+      const selectedText = window.getSelection().toString().trim();
+      if (selectedText.length > 0) {
+        // 保存选中的文本
+        selectedTextContent = selectedText;
+        console.log("通过复制快捷键保存的文本:", selectedTextContent);
+        
+        // 检查是否已存在浮动按钮，避免重复创建
+        if (!floatingButton || !document.body.contains(floatingButton)) {
+          // 获取选中文本的位置
+          const selection = window.getSelection();
+          let rect;
+          
+          if (selection.rangeCount > 0) {
+            rect = selection.getRangeAt(0).getBoundingClientRect();
+          } else {
+            rect = {
+              left: window.innerWidth / 2 - 30,
+              top: window.innerHeight / 2 - 30,
+              right: window.innerWidth / 2 + 30,
+              bottom: window.innerHeight / 2 + 30
+            };
+          }
+          
+          // 计算按钮位置
+          const x = rect.right + window.scrollX + 10;
+          const y = rect.top + window.scrollY - 30;
+          
+          // 创建带工具提示的浮动按钮
+          floatingButton = createFloatingButtonWithTooltip(x, y, selectedText);
+        }
+      }
+    }, 100);
+  }
+});
+
+// 创建带工具提示的浮动按钮
+function createFloatingButtonWithTooltip(x, y, text) {
+  // 创建浮动按钮
+  const button = document.createElement('div');
+  button.className = 'ai-buddy-floating-button';
+  button.innerHTML = '🤖';
+  
+  button.style.left = `${x}px`;
+  button.style.top = `${y}px`;
+  
+  // 存储位置数据
+  button.dataset.posX = x;
+  button.dataset.posY = y;
+  
+  // 创建工具提示
+  const tooltip = document.createElement('div');
+  tooltip.className = 'ai-buddy-tooltip';
+  tooltip.textContent = '点击使用AI助手解析复制内容';
+  tooltip.style.opacity = '0';
+  
+  // 添加工具提示到按钮
+  button.appendChild(tooltip);
+  
+  // 添加鼠标悬停显示工具提示
+  button.addEventListener('mouseenter', () => {
+    tooltip.style.opacity = '1';
+  });
+  
+  button.addEventListener('mouseleave', () => {
+    tooltip.style.opacity = '0';
+  });
+  
+  // 添加点击事件
+  button.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const buttonRect = button.getBoundingClientRect();
+    const menuX = buttonRect.left + window.scrollX;
+    const menuY = buttonRect.bottom + window.scrollY + 5;
+    
+    createPromptMenu(text, menuX, menuY);
+  });
+  
+  document.body.appendChild(button);
+  
+  // 确保按钮在视口内
+  adjustElementPosition(button, x, y);
+  
+  return button;
+}
+
+// 添加工具提示样式
+const tooltipStyles = `
+  .ai-buddy-tooltip {
+    position: absolute;
+    background-color: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 10px;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    z-index: 10002;
+  }
+  
+  .ai-buddy-tooltip:before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-width: 5px 5px 5px 0;
+    border-style: solid;
+    border-color: transparent #333 transparent transparent;
+  }
+  
+  /* 添加响应式处理，确保工具提示在右侧空间不足时显示在左侧 */
+  @media (max-width: 768px) {
+    .ai-buddy-floating-button:hover .ai-buddy-tooltip {
+      left: auto;
+      right: 100%;
+      margin-left: 0;
+      margin-right: 10px;
+    }
+    
+    .ai-buddy-floating-button:hover .ai-buddy-tooltip:before {
+      left: auto;
+      right: -5px;
+      border-width: 5px 0 5px 5px;
+      border-color: transparent transparent transparent #333;
+    }
+  }
+`;
+
+// 将工具提示样式添加到文档
+const tooltipStyleElement = document.createElement('style');
+tooltipStyleElement.textContent = tooltipStyles;
+document.head.appendChild(tooltipStyleElement);
+
 // Text selection event
 document.addEventListener('mouseup', (event) => {
     // Delay processing to wait for selection to complete
@@ -124,7 +293,7 @@ document.addEventListener('click', (event) => {
     }
 });
 
-// 修改发送到LLM的函数，确保关闭所有菜单
+// 完全重写 sendToLLM 函数，确保弹窗始终居中显示
 function sendToLLM(prompt, x, y, appendToExisting = false) {
     // 关闭所有菜单
     removeAllMenus();
@@ -136,19 +305,34 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
     let existingPopup = null;
     let contentContainer = null;
     
+    // 使用屏幕中心坐标，而不是传入的x, y
+    const centerX = window.innerWidth / 2 + window.scrollX;
+    const centerY = window.innerHeight / 2 + window.scrollY;
+    
+    console.log("使用屏幕中心坐标:", centerX, centerY, "而不是:", x, y);
+    
     // 检查是否需要在现有弹窗中追加内容
     if (appendToExisting) {
         existingPopup = document.querySelector('.ai-buddy-response-popup');
         if (existingPopup) {
             contentContainer = existingPopup.querySelector('.ai-buddy-response-content');
+            
+            // 确保现有弹窗居中
+            centerElementOnScreen(existingPopup);
         }
     }
     
     // 如果没有现有的弹窗或内容容器，创建一个新的
     if (!existingPopup || !contentContainer) {
-        // 立即显示一个空的响应弹窗
-        showResponse("", x, y, true);
-        contentContainer = document.querySelector('.ai-buddy-response-content');
+        // 立即显示一个空的响应弹窗，使用屏幕中心坐标
+        contentContainer = showResponse("", centerX, centerY, true);
+        
+        // 获取新创建的弹窗并确保居中
+        existingPopup = document.querySelector('.ai-buddy-response-popup');
+        if (existingPopup) {
+            // 确保弹窗居中
+            centerElementOnScreen(existingPopup);
+        }
     }
     
     if (!contentContainer) {
@@ -173,7 +357,7 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
     cursorContainer.appendChild(cursor);
     
     // 创建操作栏并添加按钮
-    const actionBar = document.querySelector('.ai-buddy-action-bar');
+    const actionBar = existingPopup.querySelector('.ai-buddy-action-bar');
     
     // 添加终止按钮
     const stopButton = document.createElement('button');
@@ -278,11 +462,14 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
                     
                     // 如果是新弹窗，自动聚焦到跟进输入框
                     if (!appendToExisting) {
-                        const followupInput = document.querySelector('.ai-buddy-followup-input');
+                        const followupInput = existingPopup.querySelector('.ai-buddy-followup-input');
                         if (followupInput) {
                             followupInput.focus();
                         }
                     }
+                    
+                    // 确保弹窗居中
+                    centerElementOnScreen(existingPopup);
                     
                     return;
                 }
@@ -336,7 +523,15 @@ function sendToLLM(prompt, x, y, appendToExisting = false) {
         
         // 启用跟进输入框
         enableFollowupInput();
+        
+        // 确保弹窗居中
+        centerElementOnScreen(existingPopup);
     });
+    
+    // 立即重新居中弹窗，确保它显示在屏幕中央
+    if (existingPopup) {
+        centerElementOnScreen(existingPopup);
+    }
 }
 
 // 禁用跟进输入框
@@ -499,13 +694,19 @@ const fixedLayoutStyleElement = document.createElement('style');
 fixedLayoutStyleElement.textContent = fixedLayoutStyles;
 document.head.appendChild(fixedLayoutStyleElement);
 
-// 修改 showResponse 函数，重构弹窗结构
+// 修改 showResponse 函数，确保弹窗始终居中显示
 function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   // 确保样式更新
   updatePopupStyles();
   
   let popup = document.querySelector('.ai-buddy-response-popup');
   let contentContainer = null;
+  
+  // 忽略传入的x和y坐标，始终使用屏幕中心
+  const centerX = window.innerWidth / 2 + window.scrollX;
+  const centerY = window.innerHeight / 2 + window.scrollY;
+  
+  console.log("使用屏幕中心坐标:", centerX, centerY, "而不是:", x, y);
   
   // 如果没有现有弹窗，创建一个新的
   if (!popup) {
@@ -537,12 +738,19 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
     
     const followupInput = document.createElement('textarea');
     followupInput.className = 'ai-buddy-followup-input';
-    followupInput.placeholder = '可以在这里输入跟进问题...';
     followupInput.rows = 2;
+    
+    // 检测平台并设置适当的快捷键提示
+    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+    const shortcutText = isMac ? "Command+Enter 发送" : "Alt+Enter 发送";
+    followupInput.placeholder = `可以在这里输入跟进问题... (${shortcutText})`;
     
     const followupButton = document.createElement('button');
     followupButton.className = 'ai-buddy-followup-button';
     followupButton.textContent = '提问';
+    followupButton.title = isMac ? 'Command+Enter快捷发送' : 'Alt+Enter快捷发送';
+    
+    // 设置按钮点击事件
     followupButton.onclick = () => {
       const question = followupInput.value.trim();
       if (question) {
@@ -558,24 +766,27 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
         
         // 清空输入框并发送请求
         followupInput.value = '';
-        sendToLLM(fullPrompt, x, y, true);
+        
+        // 使用屏幕中心坐标，而不是传递当前弹窗位置
+        const centerX = window.innerWidth / 2 + window.scrollX;
+        const centerY = window.innerHeight / 2 + window.scrollY;
+        sendToLLM(fullPrompt, centerX, centerY, true);
         
         // 自动滚动到问题底部
         contentContainer.scrollTop = contentContainer.scrollHeight;
       }
     };
     
+    // 添加键盘提示元素
+    const keyboardHint = document.createElement('div');
+    keyboardHint.className = 'ai-buddy-keyboard-hint';
+    keyboardHint.textContent = `按${isMac ? '⌘+Enter' : 'Alt+Enter'}快速发送 / 按Esc关闭窗口`;
+    
     followupContainer.appendChild(followupInput);
     followupContainer.appendChild(followupButton);
+    followupContainer.appendChild(keyboardHint);
     
     mainContainer.appendChild(followupContainer);
-    
-    // 定位弹窗
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    popup.style.left = `${Math.min(x, window.scrollX + viewportWidth - 500)}px`;
-    popup.style.top = `${Math.min(y, window.scrollY + viewportHeight - 400)}px`;
     
     // 添加关闭按钮
     const closeButton = document.createElement('button');
@@ -588,10 +799,27 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
     };
     popup.appendChild(closeButton);
     
+    // 初始化为屏幕中心坐标
+    popup.style.left = `${centerX}px`;
+    popup.style.top = `${centerY}px`;
+    
     document.body.appendChild(popup);
+    
+    // 弹窗添加到DOM后立即居中显示
+    centerElementOnScreen(popup);
+    
+    // 添加窗口大小改变时重新居中的监听器
+    window.addEventListener('resize', () => {
+      if (popup && document.body.contains(popup)) {
+        centerElementOnScreen(popup);
+      }
+    });
   } else {
     // 使用现有弹窗
     contentContainer = popup.querySelector('.ai-buddy-response-content');
+    
+    // 确保现有弹窗居中
+    centerElementOnScreen(popup);
   }
   
   // 如果不是流式输出且有内容，直接渲染全部内容
@@ -605,6 +833,107 @@ function showResponse(response, x, y, isStreaming = false, isHtml = false) {
   }
   
   return contentContainer; // 返回内容容器，方便流式更新
+}
+
+// 同样简化 showApiResponse 函数
+function showApiResponse(data, x, y) {
+    // 移除所有菜单
+    removeAllMenus();
+    
+    // 使用HTML方式显示响应，这样可以包含交互式JSON渲染
+    const responseHtml = formatJsonResponse(data);
+    
+    // 显示响应，传入false表示不是流式输出，true表示是HTML内容
+    const contentContainer = showResponse("", x, y, false, true);
+    
+    // 在内容容器中设置格式化后的JSON
+    if (contentContainer) {
+        // 创建一个包含API响应的div
+        const apiResponseDiv = document.createElement('div');
+        apiResponseDiv.className = 'ai-buddy-api-response';
+        apiResponseDiv.innerHTML = responseHtml;
+        contentContainer.appendChild(apiResponseDiv);
+        
+        // 保存原始数据供后续查询使用
+        contentContainer.dataset.originalJson = JSON.stringify(data);
+        
+        // 绑定点击事件，让JSON树中的details元素可以折叠/展开
+        const detailsElements = contentContainer.querySelectorAll('details');
+        detailsElements.forEach(details => {
+            // 已经有原生的折叠/展开功能，只需确保summary可点击
+            const summary = details.querySelector('summary');
+            if (summary) {
+                summary.style.cursor = 'pointer';
+            }
+        });
+        
+        // 添加复制按钮
+        const actionBar = contentContainer.parentNode.parentNode.querySelector('.ai-buddy-action-bar');
+        if (actionBar && !actionBar.querySelector('.ai-buddy-copy-button')) {
+            createCopyButton(actionBar, contentContainer);
+        }
+        
+        // 替换跟进问题的处理
+        const popup = contentContainer.closest('.ai-buddy-response-popup');
+        if (popup) {
+            const followupContainer = popup.querySelector('.ai-buddy-followup-container');
+            const followupInput = followupContainer?.querySelector('.ai-buddy-followup-input');
+            const followupButton = followupContainer?.querySelector('.ai-buddy-followup-button');
+            
+            if (followupInput && followupButton) {
+                // 修改提示文本，根据平台显示不同的快捷键
+                followupInput.placeholder = '向LLM询问关于这个API响应的问题...';
+                updatePlaceholderText(followupInput);
+                
+                const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+                followupButton.title = isMac ? 'Command+Enter快捷发送' : 'Alt+Enter快捷发送';
+                
+                // 替换点击处理器
+                followupButton.onclick = () => {
+                    const question = followupInput.value.trim();
+                    if (question) {
+                        // 在内容容器中添加用户问题
+                        const userQuestionDiv = document.createElement('div');
+                        userQuestionDiv.className = 'ai-buddy-user-question';
+                        userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
+                        contentContainer.appendChild(userQuestionDiv);
+                        
+                        // 准备API数据
+                        let apiData = '';
+                        try {
+                            if (contentContainer.dataset.originalJson) {
+                                apiData = JSON.stringify(JSON.parse(contentContainer.dataset.originalJson), null, 2);
+                            } else {
+                                const jsonContent = contentContainer.querySelector('.json-tree');
+                                if (jsonContent) {
+                                    apiData = jsonContent.textContent;
+                                } else {
+                                    apiData = apiResponseDiv.textContent;
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error parsing API data:', e);
+                            apiData = apiResponseDiv.textContent;
+                        }
+                        
+                        // 构建提示
+                        const prompt = `以下是一个API返回的JSON数据：\n\n${apiData}\n\n用户问题是：${question}\n\n请分析这些数据并回答用户问题。`;
+                        
+                        // 清空输入框
+                        followupInput.value = '';
+                        
+                        // 调用LLM，追加到现有弹窗
+                        sendToLLM(prompt, x, y, true);
+                        
+                        // 自动滚动到底部
+                        contentContainer.scrollTop = contentContainer.scrollHeight;
+                    }
+                };
+            }
+        }
+    }
+    
+    console.log("API响应已显示", typeof data === 'object' ? '(JSON)' : '(Text)');
 }
 
 // 修改收集对话历史函数，以适应新的对话流
@@ -664,7 +993,7 @@ const styleElement = document.createElement('style');
 styleElement.textContent = cursorStyle;
 document.head.appendChild(styleElement);
 
-// Show custom prompt input
+// 修改自定义提示输入函数，使弹窗居中显示
 function showCustomPromptInput(x, y) {
     // 保存当前的选中文本，防止后续操作清空它
     const savedSelectedText = selectedTextContent;
@@ -684,9 +1013,9 @@ function showCustomPromptInput(x, y) {
     const customPromptContainer = document.createElement('div');
     customPromptContainer.className = 'ai-buddy-custom-prompt';
     
-    // 这里 x 和 y 应该已经包含了滚动位置
-    customPromptContainer.style.left = `${x}px`;
-    customPromptContainer.style.top = `${y + 40}px`;
+    // 初始位置设置为屏幕中心附近 - 将在添加到DOM后调整
+    customPromptContainer.style.left = '50%';
+    customPromptContainer.style.top = '50%';
 
     const inputLabel = document.createElement('div');
     inputLabel.className = 'ai-buddy-custom-label';
@@ -695,7 +1024,11 @@ function showCustomPromptInput(x, y) {
 
     const inputField = document.createElement('textarea');
     inputField.className = 'ai-buddy-custom-input';
-    inputField.placeholder = '例如: 请帮我分析这段文字...';
+    
+    // 检测平台并设置适当的快捷键提示
+    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+    const shortcutText = isMac ? "Command+Enter 提交" : "Alt+Enter 提交";
+    inputField.placeholder = `例如: 请帮我分析这段文字... (${shortcutText})`;
     inputField.rows = 3;
     customPromptContainer.appendChild(inputField);
 
@@ -706,10 +1039,10 @@ function showCustomPromptInput(x, y) {
     const submitButton = document.createElement('button');
     submitButton.className = 'ai-buddy-custom-submit';
     submitButton.textContent = '提交';
-    submitButton.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
+    submitButton.title = isMac ? 'Command+Enter快捷提交' : 'Alt+Enter快捷提交';
+    
+    // 创建提交函数以便重用
+    const submitCustomPrompt = function() {
         const customPromptText = inputField.value.trim();
         if (customPromptText) {
             // 移除自定义提示框
@@ -723,15 +1056,18 @@ function showCustomPromptInput(x, y) {
                 return;
             }
             
-            console.log("发送到LLM的文本:", savedSelectedText);
-            console.log("发送到LLM的提示:", customPromptText);
-            
             // 组合提示文本和选中的内容
             const fullPrompt = customPromptText + " " + savedSelectedText;
             
             // 使用流式输出调用LLM
             sendToLLM(fullPrompt, x, y);
         }
+    };
+    
+    submitButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        submitCustomPrompt();
     });
     buttonContainer.appendChild(submitButton);
 
@@ -750,6 +1086,30 @@ function showCustomPromptInput(x, y) {
     });
     buttonContainer.appendChild(cancelButton);
 
+    // 添加键盘事件监听
+    inputField.addEventListener('keydown', function(e) {
+        // 如果是Alt+Enter或Command+Enter
+        if (e.key === 'Enter' && (e.altKey || e.metaKey)) {
+            e.preventDefault();
+            e.stopPropagation();
+            submitCustomPrompt();
+        }
+        
+        // 如果是Esc键，关闭提示框
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (customPromptContainer.parentNode) {
+                document.body.removeChild(customPromptContainer);
+            }
+        }
+    });
+
+    // 添加键盘快捷键提示
+    const keyboardHint = document.createElement('div');
+    keyboardHint.className = 'ai-buddy-keyboard-hint';
+    keyboardHint.textContent = `按${isMac ? '⌘+Enter' : 'Alt+Enter'}快速提交 / 按Esc取消`;
+    
     // 可选: 添加一个显示选中文本的区域
     const selectedTextDisplay = document.createElement('div');
     selectedTextDisplay.className = 'ai-buddy-selected-text-display';
@@ -764,14 +1124,118 @@ function showCustomPromptInput(x, y) {
     selectedTextDisplay.style.overflow = 'auto';
     
     customPromptContainer.appendChild(buttonContainer);
-    customPromptContainer.appendChild(selectedTextDisplay);  // 添加选中文本显示
+    customPromptContainer.appendChild(keyboardHint);
+    customPromptContainer.appendChild(selectedTextDisplay);
+    
     document.body.appendChild(customPromptContainer);
-
+    
+    // 居中显示弹窗
+    centerElementOnScreen(customPromptContainer);
+    
+    // 添加窗口大小改变时重新居中的监听器
+    window.addEventListener('resize', () => {
+      if (customPromptContainer && document.body.contains(customPromptContainer)) {
+        centerElementOnScreen(customPromptContainer);
+      }
+    });
+    
     // 聚焦输入框
     inputField.focus();
 }
 
-// Create prompt options menu
+// 更新自定义提示框的样式，使其与其他界面元素风格一致
+const customPromptStyles = `
+  .ai-buddy-custom-prompt {
+    position: absolute;
+    width: 400px;
+    max-width: 90vw;
+    background-color: white;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    z-index: 10001;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+  
+  .ai-buddy-custom-label {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #333;
+  }
+  
+  .ai-buddy-custom-input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 60px;
+    margin-bottom: 12px;
+  }
+  
+  .ai-buddy-custom-input:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+  }
+  
+  .ai-buddy-custom-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  
+  .ai-buddy-custom-submit, .ai-buddy-custom-cancel {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .ai-buddy-custom-submit {
+    background-color: #4a90e2;
+    color: white;
+  }
+  
+  .ai-buddy-custom-submit:hover {
+    background-color: #3a80d2;
+  }
+  
+  .ai-buddy-custom-cancel {
+    background-color: #f2f2f2;
+    color: #333;
+  }
+  
+  .ai-buddy-custom-cancel:hover {
+    background-color: #e5e5e5;
+  }
+  
+  /* 使自定义提示框内的键盘提示与其他界面一致 */
+  .ai-buddy-custom-prompt .ai-buddy-keyboard-hint {
+    font-size: 12px;
+    color: #666;
+    margin: 8px 0;
+    text-align: center;
+    font-style: italic;
+  }
+`;
+
+// 添加或更新自定义提示框样式
+let customPromptStyleElement = document.getElementById('ai-buddy-custom-prompt-styles');
+if (!customPromptStyleElement) {
+  customPromptStyleElement = document.createElement('style');
+  customPromptStyleElement.id = 'ai-buddy-custom-prompt-styles';
+  document.head.appendChild(customPromptStyleElement);
+}
+customPromptStyleElement.textContent = customPromptStyles;
+
+// 修改 createPromptMenu 函数，确保菜单在视口内
 function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = false) {
     // 如果是创建子菜单，不要移除父菜单
     if (!isSubmenu) {
@@ -787,8 +1251,7 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
         menu.classList.add('ai-buddy-main-menu');
     }
 
-    // 确保位置考虑了页面滚动
-    // 注意：在调用此函数时已经传入了包含滚动的位置，所以不需要再加 window.scrollX/Y
+    // 初始位置设置
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
 
@@ -807,7 +1270,7 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
         
         menuItem.dataset.index = index;
         
-        // 修改子菜单悬停处理，确保正确考虑滚动位置
+        // 修改子菜单悬停处理
         if (option.subMenu) {
             let submenuTimeout;
             
@@ -881,31 +1344,13 @@ function createPromptMenu(selectedText, x, y, parentOption = null, isSubmenu = f
     
     document.body.appendChild(menu);
     
+    // 添加后调整位置，确保在视口内
+    adjustElementPosition(menu, x, y);
+    
     if (isSubmenu) {
         menu.dataset.isSubmenu = 'true';
     } else {
         promptMenu = menu;
-    }
-
-    adjustMenuPosition(menu);
-}
-
-// 调整菜单位置，确保在视窗内
-function adjustMenuPosition(menu) {
-    const rect = menu.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    // 检查右边界
-    if (rect.right > viewportWidth) {
-        const overflowX = rect.right - viewportWidth;
-        menu.style.left = `${parseInt(menu.style.left) - overflowX - 10}px`;
-    }
-    
-    // 检查下边界
-    if (rect.bottom > viewportHeight) {
-        const overflowY = rect.bottom - viewportHeight;
-        menu.style.top = `${parseInt(menu.style.top) - overflowY - 10}px`;
     }
 }
 
@@ -1085,20 +1530,24 @@ function renderMarkdown(text) {
     return html;
 }
 
-// 添加一个函数来清理所有弹出元素
+// 增强 removeAllPopups 函数，作为 Esc 键的响应函数
 function removeAllPopups() {
+    console.log("执行 removeAllPopups");
+    
     // 移除所有浮动按钮
     const floatingButtons = document.querySelectorAll('.ai-buddy-floating-button');
     floatingButtons.forEach(button => {
         if (button.parentNode) {
+            console.log("移除浮动按钮");
             button.parentNode.removeChild(button);
         }
     });
     
     // 移除所有菜单
-    const menus = document.querySelectorAll('.ai-buddy-prompt-menu');
+    const menus = document.querySelectorAll('.ai-buddy-prompt-menu, .ai-buddy-main-menu, .ai-buddy-submenu');
     menus.forEach(menu => {
         if (menu.parentNode) {
+            console.log("移除菜单");
             menu.parentNode.removeChild(menu);
         }
     });
@@ -1107,7 +1556,17 @@ function removeAllPopups() {
     const popups = document.querySelectorAll('.ai-buddy-response-popup');
     popups.forEach(popup => {
         if (popup.parentNode) {
+            console.log("移除弹窗");
             popup.parentNode.removeChild(popup);
+        }
+    });
+    
+    // 移除自定义提示框
+    const customPrompts = document.querySelectorAll('.ai-buddy-custom-prompt');
+    customPrompts.forEach(prompt => {
+        if (prompt.parentNode) {
+            console.log("移除自定义提示框");
+            prompt.parentNode.removeChild(prompt);
         }
     });
     
@@ -1115,6 +1574,7 @@ function removeAllPopups() {
     const loaders = document.querySelectorAll('.ai-buddy-loader, .ai-buddy-temp-message');
     loaders.forEach(loader => {
         if (loader.parentNode) {
+            console.log("移除加载指示器");
             loader.parentNode.removeChild(loader);
         }
     });
@@ -1122,7 +1582,34 @@ function removeAllPopups() {
     // 重置全局变量
     floatingButton = null;
     promptMenu = null;
+    
+    console.log("所有元素已清理完毕");
 }
+
+// 添加一个直接的调试函数，用于测试键盘快捷键
+function setupGlobalKeyboardListeners() {
+    document.addEventListener('keydown', function(e) {
+        // 记录所有键盘事件以帮助调试
+        console.log(`键盘事件: key=${e.key}, code=${e.code}, altKey=${e.altKey}, ctrlKey=${e.ctrlKey}, metaKey=${e.metaKey}`);
+        
+        // 当按下 Esc 键时
+        if (e.key === 'Escape') {
+            console.log("执行全局 Escape 键功能 - 关闭所有元素");
+            removeAllPopups();
+        }
+        
+        // 添加一个测试组合键，用于调试
+        if (e.key === 'D' && e.altKey) {
+            console.log("执行 Alt+D 测试功能");
+            alert('键盘快捷键系统正常工作中');
+        }
+    });
+    
+    console.log("全局键盘监听器已设置");
+}
+
+// 初始化时设置全局键盘监听
+setupGlobalKeyboardListeners();
 
 // 辅助函数：根据菜单项元素查找对应的选项
 function findOptionByElement(element) {
@@ -1210,7 +1697,7 @@ function showMenu(x, y, parentOption = null) {
     document.body.appendChild(promptMenu);
     
     // 添加调整位置
-    adjustMenuPosition(promptMenu);
+    adjustElementPosition(promptMenu, x, y);
 }
 
 // 更新API调用函数，确保GET和POST请求使用相同的JSON渲染
@@ -1514,106 +2001,6 @@ function formatArxivResponse(xmlString) {
     }
 }
 
-// 修改 showApiResponse 函数也使用新结构
-function showApiResponse(data, x, y) {
-    // 移除所有菜单
-    removeAllMenus();
-    
-    // 使用HTML方式显示响应，这样可以包含交互式JSON渲染
-    const responseHtml = formatJsonResponse(data);
-    
-    // 显示响应，传入false表示不是流式输出，true表示是HTML内容
-    const contentContainer = showResponse("", x, y, false, true);
-    
-    // 在内容容器中设置格式化后的JSON
-    if (contentContainer) {
-        // 创建一个包含API响应的div
-        const apiResponseDiv = document.createElement('div');
-        apiResponseDiv.className = 'ai-buddy-api-response';
-        apiResponseDiv.innerHTML = responseHtml;
-        contentContainer.appendChild(apiResponseDiv);
-        
-        // 保存原始数据供后续查询使用
-        contentContainer.dataset.originalJson = JSON.stringify(data);
-        
-        // 绑定点击事件，让JSON树中的details元素可以折叠/展开
-        const detailsElements = contentContainer.querySelectorAll('details');
-        detailsElements.forEach(details => {
-            // 已经有原生的折叠/展开功能，只需确保summary可点击
-            const summary = details.querySelector('summary');
-            if (summary) {
-                summary.style.cursor = 'pointer';
-            }
-        });
-        
-        // 添加复制按钮
-        const actionBar = contentContainer.parentNode.parentNode.querySelector('.ai-buddy-action-bar');
-        if (actionBar && !actionBar.querySelector('.ai-buddy-copy-button')) {
-            createCopyButton(actionBar, contentContainer);
-        }
-        
-        // 替换跟进问题的处理
-        const popup = contentContainer.closest('.ai-buddy-response-popup');
-        if (popup) {
-            const followupContainer = popup.querySelector('.ai-buddy-followup-container');
-            const followupInput = followupContainer?.querySelector('.ai-buddy-followup-input');
-            const followupButton = followupContainer?.querySelector('.ai-buddy-followup-button');
-            
-            if (followupInput && followupButton) {
-                // 修改提示文本
-                followupInput.placeholder = '向LLM询问关于这个API响应的问题...';
-                
-                // 保存原来的处理器以备后用
-                const originalClick = followupButton.onclick;
-                
-                // 替换点击处理器
-                followupButton.onclick = () => {
-                    const question = followupInput.value.trim();
-                    if (question) {
-                        // 在内容容器中添加用户问题
-                        const userQuestionDiv = document.createElement('div');
-                        userQuestionDiv.className = 'ai-buddy-user-question';
-                        userQuestionDiv.innerHTML = `<div class="question-header">我的问题：</div><div class="question-content">${question}</div>`;
-                        contentContainer.appendChild(userQuestionDiv);
-                        
-                        // 准备API数据
-                        let apiData = '';
-                        try {
-                            if (contentContainer.dataset.originalJson) {
-                                apiData = JSON.stringify(JSON.parse(contentContainer.dataset.originalJson), null, 2);
-                            } else {
-                                const jsonContent = contentContainer.querySelector('.json-tree');
-                                if (jsonContent) {
-                                    apiData = jsonContent.textContent;
-                                } else {
-                                    apiData = apiResponseDiv.textContent;
-                                }
-                            }
-                        } catch (e) {
-                            console.error('Error parsing API data:', e);
-                            apiData = apiResponseDiv.textContent;
-                        }
-                        
-                        // 构建提示
-                        const prompt = `以下是一个API返回的JSON数据：\n\n${apiData}\n\n用户问题是：${question}\n\n请分析这些数据并回答用户问题。`;
-                        
-                        // 清空输入框
-                        followupInput.value = '';
-                        
-                        // 调用LLM，追加到现有弹窗
-                        sendToLLM(prompt, x, y, true);
-                        
-                        // 自动滚动到底部
-                        contentContainer.scrollTop = contentContainer.scrollHeight;
-                    }
-                };
-            }
-        }
-    }
-    
-    console.log("API响应已显示", typeof data === 'object' ? '(JSON)' : '(Text)');
-}
-
 // 添加一个专门的函数来移除所有菜单
 function removeAllMenus() {
     // 移除主菜单
@@ -1908,4 +2295,369 @@ const apiResponseStyles = `
 // 添加API响应样式到文档中
 const apiResponseStyleElement = document.createElement('style');
 apiResponseStyleElement.textContent = apiResponseStyles;
-document.head.appendChild(apiResponseStyleElement); 
+document.head.appendChild(apiResponseStyleElement);
+
+// 添加一个通用函数来调整元素位置，确保在视口内
+function adjustElementPosition(element, startX, startY, margin = 20) {
+  // 获取元素尺寸
+  const rect = element.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  
+  // 计算最佳位置
+  let bestX = startX;
+  let bestY = startY;
+  
+  // 处理右侧边界
+  if (startX + rect.width > window.scrollX + viewportWidth) {
+    bestX = window.scrollX + viewportWidth - rect.width - margin;
+  }
+  
+  // 处理底部边界
+  if (startY + rect.height > window.scrollY + viewportHeight) {
+    bestY = window.scrollY + viewportHeight - rect.height - margin;
+  }
+  
+  // 处理左侧边界
+  if (bestX < window.scrollX) {
+    bestX = window.scrollX + margin;
+  }
+  
+  // 处理顶部边界
+  if (bestY < window.scrollY) {
+    bestY = window.scrollY + margin;
+  }
+  
+  // 应用计算的位置
+  element.style.left = `${bestX}px`;
+  element.style.top = `${bestY}px`;
+  
+  return { x: bestX, y: bestY };
+} 
+
+// 优化浮动按钮位置计算函数
+function calculateButtonPosition(selection) {
+  // 默认位置 (视口中心)
+  let defaultPosition = {
+    x: window.innerWidth / 2 + window.scrollX,
+    y: window.innerHeight / 2 + window.scrollY
+  };
+  
+  try {
+    // 尝试获取选择区域的位置
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      
+      // 如果选择区域宽度为0（例如光标位置），尝试获取父元素位置
+      if (rect.width === 0 && range.startContainer.parentElement) {
+        const parentRect = range.startContainer.parentElement.getBoundingClientRect();
+        return {
+          x: parentRect.right + window.scrollX + 10,
+          y: parentRect.top + window.scrollY - 10
+        };
+      }
+      
+      // 使用选择区域的右上角
+      return {
+        x: rect.right + window.scrollX + 10,
+        y: rect.top + window.scrollY - 10
+      };
+    }
+    
+    // 如果有活动元素，使用活动元素的位置
+    if (document.activeElement && document.activeElement !== document.body) {
+      const activeRect = document.activeElement.getBoundingClientRect();
+      return {
+        x: activeRect.right + window.scrollX + 10,
+        y: activeRect.top + window.scrollY - 10
+      };
+    }
+  } catch (e) {
+    console.error("计算按钮位置时出错:", e);
+  }
+  
+  // 使用默认位置
+  return defaultPosition;
+}
+
+// 添加键盘提示样式
+const keyboardTipStyles = `
+  .ai-buddy-keyboard-tip {
+    font-size: 12px;
+    color: #777;
+    margin-top: 6px;
+    text-align: right;
+    font-style: italic;
+  }
+  
+  /* 给按钮添加提示样式 */
+  .ai-buddy-followup-button {
+    position: relative;
+  }
+  
+  .ai-buddy-followup-button:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background: #333;
+    color: white;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    margin-bottom: 5px;
+    z-index: 100;
+  }
+`;
+
+// 添加键盘提示样式到文档
+const keyboardTipStyleElement = document.createElement('style');
+keyboardTipStyleElement.textContent = keyboardTipStyles;
+document.head.appendChild(keyboardTipStyleElement);
+
+// 添加全局 Esc 键监听，关闭所有菜单和弹窗
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    console.log("Esc 键按下，关闭所有元素");
+    removeAllPopups(); // 使用已有的清理函数
+  }
+});
+
+// 添加更可靠的快捷键绑定函数
+function attachAltEnterShortcut(inputElement, callback) {
+    if (!inputElement || !callback) return;
+    
+    // 确保使用内联函数，而不是箭头函数，这样能够正确访问 this
+    const keyHandler = function(event) {
+        console.log("输入框键盘事件:", event.key, "Alt:", event.altKey, "元素:", this);
+        
+        if (event.key === 'Enter' && event.altKey) {
+            console.log("Alt+Enter 快捷键捕获成功");
+            event.preventDefault();
+            event.stopPropagation();
+            callback();
+            return false;
+        }
+    };
+    
+    // 移除任何现有处理器
+    if (inputElement._altEnterHandler) {
+        inputElement.removeEventListener('keydown', inputElement._altEnterHandler);
+    }
+    
+    // 添加新处理器并存储引用
+    inputElement.addEventListener('keydown', keyHandler);
+    inputElement._altEnterHandler = keyHandler;
+    
+    // 添加可见提示
+    inputElement.setAttribute('placeholder', inputElement.getAttribute('placeholder') || '' + ' (Alt+Enter发送)');
+    console.log("Alt+Enter 快捷键绑定成功到:", inputElement);
+}
+
+// 在文档根级别捕获键盘事件，直接处理Esc和提交快捷键
+document.addEventListener('keydown', function(event) {
+  // 处理Esc键 - 关闭所有弹窗和菜单
+  if (event.key === 'Escape') {
+    console.log('Esc键按下 - 关闭所有界面元素');
+    removeAllPopups();
+    return;
+  }
+  
+  // 处理Alt+Enter提交 - 查找当前活动的输入框并提交
+  if (event.key === 'Enter' && event.altKey) {
+    console.log('Alt+Enter键按下 - 尝试提交问题');
+    
+    // 检查当前是否有可见的AI Buddy弹窗
+    const popup = document.querySelector('.ai-buddy-response-popup');
+    if (popup) {
+      // 查找输入框和按钮
+      const followupInput = popup.querySelector('.ai-buddy-followup-input');
+      const followupButton = popup.querySelector('.ai-buddy-followup-button');
+      
+      if (followupInput && followupButton && !followupInput.disabled) {
+        console.log('找到活动的输入框，提交问题');
+        event.preventDefault(); // 阻止默认行为
+        
+        // 直接触发按钮点击事件
+        followupButton.click();
+        return;
+      }
+    }
+  }
+});
+
+// 优化全局键盘监听器，加入调试日志
+function initGlobalKeyboardListeners() {
+  console.log('初始化全局键盘监听器');
+  
+  // 确保我们没有重复添加监听器
+  document.removeEventListener('keydown', globalKeyHandler);
+  document.addEventListener('keydown', globalKeyHandler);
+  
+  console.log('全局键盘监听器已启动');
+}
+
+// 全局键盘事件处理函数，同时支持Alt+Enter和Command+Enter
+function globalKeyHandler(event) {
+  console.log(`键盘事件: key=${event.key}, altKey=${event.altKey}, metaKey=${event.metaKey}, target=${event.target.tagName}`);
+  
+  // 处理Esc键
+  if (event.key === 'Escape') {
+    console.log('Esc键处理 - 关闭所有界面元素');
+    removeAllPopups();
+    return;
+  }
+  
+  // 处理Alt+Enter或Command+Enter
+  if (event.key === 'Enter' && (event.altKey || event.metaKey)) {
+    console.log('快捷键发送处理 - ' + (event.altKey ? 'Alt+Enter' : 'Command+Enter'));
+    
+    // 查找当前活动的弹窗
+    const popup = document.querySelector('.ai-buddy-response-popup');
+    if (!popup) {
+      console.log('未找到活动弹窗');
+      return;
+    }
+    
+    // 查找输入框和按钮
+    const input = popup.querySelector('.ai-buddy-followup-input');
+    const button = popup.querySelector('.ai-buddy-followup-button');
+    
+    if (input && button && !input.disabled) {
+      console.log('找到活动输入框，点击按钮');
+      event.preventDefault();
+      button.click();
+    } else {
+      console.log('未找到活动输入框或按钮已禁用');
+    }
+  }
+}
+
+// 增强 removeAllPopups 函数
+function removeAllPopups() {
+  console.log('执行 removeAllPopups');
+  
+  // 移除所有浮动按钮
+  document.querySelectorAll('.ai-buddy-floating-button').forEach(el => el.parentNode?.removeChild(el));
+  
+  // 移除所有菜单
+  document.querySelectorAll('.ai-buddy-prompt-menu, .ai-buddy-submenu').forEach(el => el.parentNode?.removeChild(el));
+  
+  // 移除所有响应弹窗
+  document.querySelectorAll('.ai-buddy-response-popup').forEach(el => el.parentNode?.removeChild(el));
+  
+  // 移除自定义提示框
+  document.querySelectorAll('.ai-buddy-custom-prompt').forEach(el => el.parentNode?.removeChild(el));
+  
+  // 重置全局变量
+  floatingButton = null;
+  promptMenu = null;
+  
+  console.log('所有界面元素已清理');
+}
+
+// 添加键盘提示样式
+const keyboardHintStyles = `
+  .ai-buddy-keyboard-hint {
+    font-size: 12px;
+    color: #666;
+    margin-top: 8px;
+    text-align: center;
+    font-style: italic;
+  }
+`;
+
+// 添加键盘提示样式到文档
+const keyboardHintStyleElement = document.createElement('style');
+keyboardHintStyleElement.textContent = keyboardHintStyles;
+document.head.appendChild(keyboardHintStyleElement);
+
+// 初始化键盘监听器
+initGlobalKeyboardListeners();
+
+// 更新提示文本，显示两种快捷键方式
+function updatePlaceholderText(inputElement) {
+  if (!inputElement) return;
+  
+  // 根据用户平台选择合适的提示文本
+  const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const shortcutText = isMac 
+    ? "Command+Enter 发送" 
+    : "Alt+Enter 发送";
+  
+  // 确保不重复添加快捷键提示
+  let placeholder = inputElement.placeholder || "";
+  if (!placeholder.includes("Enter")) {
+    inputElement.placeholder = `${placeholder} (${shortcutText})`;
+  }
+}
+
+// 更新视觉提示，显示用户平台相应的快捷键
+function createKeyboardHintElement() {
+  const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const sendShortcut = isMac ? "⌘+Enter" : "Alt+Enter";
+  
+  const keyboardHint = document.createElement('div');
+  keyboardHint.className = 'ai-buddy-keyboard-hint';
+  keyboardHint.textContent = `按${sendShortcut}快速发送 / 按Esc关闭窗口`;
+  
+  return keyboardHint;
+}
+
+// 添加一个通用函数，用于将元素居中显示在屏幕上
+function centerElementOnScreen(element) {
+  if (!element) return;
+  
+  // 获取视口尺寸
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  
+  // 获取元素尺寸
+  const rect = element.getBoundingClientRect();
+  const elementWidth = rect.width;
+  const elementHeight = rect.height;
+  
+  // 计算居中位置（考虑滚动位置）
+  const centerX = window.scrollX + (viewportWidth - elementWidth) / 2;
+  const centerY = window.scrollY + (viewportHeight - elementHeight) / 2;
+  
+  // 应用位置
+  element.style.left = `${Math.max(0, centerX)}px`;
+  element.style.top = `${Math.max(0, centerY)}px`;
+  
+  console.log(`元素已居中: width=${elementWidth}, height=${elementHeight}, position=(${centerX}, ${centerY})`);
+}
+
+// 添加居中弹窗的样式
+function addCenteredPopupStyles() {
+    const styles = `
+        /* 确保弹窗居中时的平滑过渡 */
+        .ai-buddy-response-popup, .ai-buddy-custom-prompt {
+            transition: left 0.2s ease-out, top 0.2s ease-out;
+        }
+        
+        /* 修复弹窗中的内容在切换中可能出现的闪烁 */
+        .ai-buddy-response-popup {
+            will-change: transform;
+            transform: translateZ(0);
+        }
+        
+        /* 鼠标悬停时增加视觉反馈 */
+        .ai-buddy-response-popup:hover, .ai-buddy-custom-prompt:hover {
+            box-shadow: 0 12px 40px rgba(0,0,0,0.25) !important;
+        }
+    `;
+    
+    const styleEl = document.createElement('style');
+    styleEl.id = 'ai-buddy-centered-popup-styles';
+    styleEl.textContent = styles;
+    document.head.appendChild(styleEl);
+    
+    console.log("居中弹窗样式已添加");
+}
+
+// 在初始化时添加样式
+addCenteredPopupStyles();
